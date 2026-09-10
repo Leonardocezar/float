@@ -9,6 +9,7 @@ final class SpotifyPlaybackEngine: NSObject, ObservableObject {
 
     @Published private(set) var isActivated = false
     @Published var lastLog: String?
+    @Published var lastError: String?
 
     let webView: WKWebView
 
@@ -67,26 +68,26 @@ final class SpotifyPlaybackEngine: NSObject, ObservableObject {
     func activate() { evaluate("floatActivate()") }
 
     func play(contextURI: String, web: SpotifyWebClient) {
-        guard let deviceID else { lastLog = "player not ready yet"; return }
+        guard let deviceID else { lastError = "Float player not ready yet — open Spotify settings and reconnect."; return }
         Task {
             do {
                 if !isActivated { activate() }
                 try await web.transferPlayback(to: deviceID, play: false)
                 try await web.play(contextURI: contextURI, deviceID: deviceID)
             } catch {
-                lastLog = error.localizedDescription
+                lastError = error.localizedDescription
             }
         }
     }
 
     func playTrack(uri trackURI: String, inContext contextURI: String, web: SpotifyWebClient) {
-        guard let deviceID else { lastLog = "player not ready yet"; return }
+        guard let deviceID else { lastError = "Float player not ready yet — open Spotify settings and reconnect."; return }
         Task {
             do {
                 if !isActivated { activate() }
                 try await web.play(contextURI: contextURI, offsetTrackURI: trackURI, deviceID: deviceID)
             } catch {
-                lastLog = error.localizedDescription
+                lastError = error.localizedDescription
             }
         }
     }

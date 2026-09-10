@@ -80,6 +80,10 @@ final class SpotifyModel: ObservableObject {
         engine.objectWillChange
             .sink { [weak self] in self?.objectWillChange.send() }
             .store(in: &cancellables)
+        engine.$lastError
+            .compactMap { $0 }
+            .sink { [weak self] in self?.lastError = $0 }
+            .store(in: &cancellables)
         auth.objectWillChange
             .sink { [weak self] in self?.objectWillChange.send() }
             .store(in: &cancellables)

@@ -387,13 +387,22 @@ struct SpotifyDrawerNavigationView: View {
     private func browseRow(_ item: SpotifyBrowseItem) -> some View {
         let browsable = spotify.canBrowse(item)
         return HStack(spacing: 8) {
-            Image(systemName: item.kind == .album ? "square.stack" : "music.note.list")
-                .font(.system(size: 10)).foregroundStyle(.secondary).frame(width: 14)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(item.name).font(.system(size: 11, weight: .medium)).lineLimit(1)
-                Text(item.subtitle).font(.system(size: 9)).foregroundStyle(.secondary).lineLimit(1)
+            Button {
+                if browsable { spotify.openList(item) } else { spotify.playList(uri: item.uri) }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: item.kind == .album ? "square.stack" : "music.note.list")
+                        .font(.system(size: 10)).foregroundStyle(.secondary).frame(width: 14)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(item.name).font(.system(size: 11, weight: .medium)).lineLimit(1)
+                        Text(item.subtitle).font(.system(size: 9)).foregroundStyle(.secondary).lineLimit(1)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .contentShape(Rectangle())
             }
-            Spacer(minLength: 0)
+            .buttonStyle(.plain)
+
             Button { spotify.playList(uri: item.uri) } label: {
                 Image(systemName: "play.fill").font(.system(size: 9))
             }
@@ -403,11 +412,6 @@ struct SpotifyDrawerNavigationView: View {
             }
         }
         .padding(.vertical, 2)
-        .contentShape(Rectangle())
-        .onTapGesture {
-            if browsable { spotify.openList(item) }
-            else { spotify.playList(uri: item.uri) }
-        }
         .listRowInsets(EdgeInsets(top: 3, leading: 8, bottom: 3, trailing: 8))
         .listRowSeparator(.hidden)
     }
@@ -477,20 +481,24 @@ private struct TrackRow<Menu: View>: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: isCurrent ? "speaker.wave.2.fill" : "music.note")
-                .font(.system(size: 9))
-                .foregroundStyle(isCurrent ? Color.accentColor : .secondary)
-                .frame(width: 13)
-
-            VStack(alignment: .leading, spacing: 1) {
-                Text(track.name)
-                    .font(.system(size: 11, weight: isCurrent ? .semibold : .regular))
-                    .lineLimit(1)
-                Text(track.artist)
-                    .font(.system(size: 9)).foregroundStyle(.secondary).lineLimit(1)
+            Button(action: onPlay) {
+                HStack(spacing: 8) {
+                    Image(systemName: isCurrent ? "speaker.wave.2.fill" : "music.note")
+                        .font(.system(size: 9))
+                        .foregroundStyle(isCurrent ? Color.accentColor : .secondary)
+                        .frame(width: 13)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(track.name)
+                            .font(.system(size: 11, weight: isCurrent ? .semibold : .regular))
+                            .lineLimit(1)
+                        Text(track.artist)
+                            .font(.system(size: 9)).foregroundStyle(.secondary).lineLimit(1)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .contentShape(Rectangle())
             }
-
-            Spacer(minLength: 0)
+            .buttonStyle(.plain)
 
             SwiftUI.Menu {
                 menu()
@@ -507,8 +515,6 @@ private struct TrackRow<Menu: View>: View {
         .padding(.horizontal, 4)
         .background(RoundedRectangle(cornerRadius: 5)
             .fill(isCurrent ? Color.accentColor.opacity(0.14) : .clear))
-        .contentShape(Rectangle())
-        .onTapGesture(perform: onPlay)
         .listRowInsets(EdgeInsets(top: 2, leading: 8, bottom: 2, trailing: 6))
         .listRowSeparator(.hidden)
     }

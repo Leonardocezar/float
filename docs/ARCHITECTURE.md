@@ -65,6 +65,10 @@ long-lived state:
   .nonactivatingPanel]`, `level = .floating`, joins all Spaces,
   `isMovableByWindowBackground`. Persists only its top-left corner
   (`UserDefaults` key `panel.origin`). `canBecomeKey = true` so `TextField`s work.
+  Its hosting view is a `FirstMouseHostingView` (`acceptsFirstMouse = true`) so
+  clicks land on the first tap while another app is frontmost. No traffic-light
+  buttons (borderless) — the header's `QuitButton` (`NSApp.terminate`) is how you
+  close the app.
 - **`PanelState`** (`@MainActor ObservableObject`) — `isCompact`, `isDrawerOpen`
   (right / playlist), `isSettingsDrawerOpen` (left), all persisted. `size` and
   `leftInset` are derived; every setter calls `relayout()` →

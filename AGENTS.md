@@ -37,6 +37,10 @@ xcodebuild -project Float.xcodeproj -scheme Float \
 Always `xcodegen generate` after changing `project.yml`, adding/removing/renaming
 source files, or changing entitlements/Info.plist keys.
 
+`Scripts/make-dmg.sh` builds Release, ad-hoc signs and packages
+`dist/Float-<version>.dmg` (not notarized — other Macs need right-click → Open
+on first launch).
+
 ### Running the app for manual verification
 
 There is no Dock icon and no menu bar, so normal automation is awkward.

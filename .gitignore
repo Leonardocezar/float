@@ -1,0 +1,12 @@
+*.xcodeproj/
+DerivedData/
+build/
+.build/
+*.xcuserstate
+xcuserdata/
+.DS_Store
+.env
+*.local
+
+Resources/Info.plist
+Resources/Float.entitlements

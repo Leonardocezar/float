@@ -5,23 +5,23 @@ focus stats) and Spotify control.
 
 - **Floating panel** — borderless `NSPanel` at floating window level, shows on all
   Spaces, drag from anywhere, remembers its position. Runs as a menu-bar-less
-  agent (no Dock icon); open settings from the gear icon.
+  agent (no Dock icon); settings open in a drawer from the gear button.
 - **Pomodoro** — configurable focus / short / long break intervals, auto-cycling,
-  notifications + sound, `🍅` session count.
+  notifications + sound, 🍅 session count.
 - **Tasks** — SwiftData task list; tap a task to make it the "active" one that
-  completed Pomodoros are credited to.
+  completed pomodoros are credited to.
 - **Stats** — today / this-week focus minutes, day streak, last-7-days chart.
-- **Spotify (Web API + Web Playback SDK)** — Float registers itself as a Spotify
-  Connect device via the Web Playback SDK running in a hidden `WKWebView`, so no
-  other Spotify app needs to be open. Requires **Spotify Premium**. The Web API
-  (OAuth PKCE) drives what to play, playlist pickers and "save to Liked Songs".
-- **Music sync** — optionally start a focus playlist when a work interval begins
-  and pause / switch on breaks.
+- **Spotify** — Float registers itself as a Spotify Connect device via the Web
+  Playback SDK in a hidden `WKWebView`, so no other Spotify app needs to be
+  open (**Premium required**). A right-side drawer searches Spotify and browses
+  your playlists; playlist track listings are cached locally and refreshed by a
+  background job.
+- **Music sync** — optionally resume your music when a focus interval starts and
+  pause (or keep playing) on breaks.
 
 ## Requirements
 
-- macOS 14+
-- Xcode 16+
+- macOS 14+, Xcode 16+
 - [XcodeGen](https://github.com/yonaskolb/XcodeGen): `brew install xcodegen`
 
 ## Build & run
@@ -29,52 +29,33 @@ focus stats) and Spotify control.
 ```sh
 xcodegen generate
 open Float.xcodeproj      # then Run (⌘R)
-# or headless:
-xcodebuild -scheme Float -configuration Debug build
-xcodebuild -scheme Float test
+
+# headless
+xcodebuild -project Float.xcodeproj -scheme Float -configuration Debug -destination 'platform=macOS' build
+xcodebuild -project Float.xcodeproj -scheme Float -destination 'platform=macOS' test
 ```
 
-`Float.xcodeproj` is generated and git-ignored — edit `project.yml` instead.
+`Float.xcodeproj`, `Resources/Info.plist` and `Resources/Float.entitlements` are
+generated from `project.yml` and git-ignored — edit `project.yml` and re-run
+`xcodegen generate`.
 
-On first launch macOS will ask for **Notifications** permission. The app is not
+On first launch macOS asks for **Notifications** permission. The app is not
 sandboxed.
 
 ## Spotify setup (required for music)
 
 1. Create an app at <https://developer.spotify.com/dashboard>.
 2. Add redirect URI: `http://127.0.0.1:8888/callback`.
-3. Enable the **Web Playback SDK** for the app (Web API is on by default).
-4. Copy the **Client ID** into Float → Settings → Music → Client ID, then
-   **Connect Spotify** and authorize in the browser.
-5. Back in the panel, click **Enable audio playback** once (a browser autoplay
-   gate) — after that Float appears as a "Float" device in any Spotify client and
-   plays audio itself.
+3. Enable the **Web Playback SDK** for the app.
+4. Paste the **Client ID** into Float → Settings → Spotify, then **Connect** and
+   authorize in the browser.
 
-Requires **Spotify Premium** (Web Playback SDK requirement). No client secret is
-stored; OAuth tokens live in the Keychain. Scopes requested: `streaming`,
-`user-read-email/private`, `user-read/modify-playback-state`,
-`user-read-currently-playing`, `playlist-read-private`, `user-library-read/modify`.
+Requires **Spotify Premium**. No client secret is stored; OAuth tokens live in
+the Keychain.
 
-### How playback works
+## Working on the code
 
-- `Spotify/PlayerHTML.swift` is served by `LocalWebServer` from
-  `http://127.0.0.1:<port>` (loopback = secure context, so the SDK's EME works
-  without TLS) into a hidden `WKWebView` owned by `SpotifyPlaybackEngine`.
-- Transport (play/pause/seek/next/volume) calls the SDK directly via
-  `evaluateJavaScript`; picking a playlist/album calls the Web API
-  `PUT /me/player/play` targeting Float's `device_id`.
-- State comes back through `player_state_changed` → `window.webkit.messageHandlers`
-  → `NowPlaying`; a 1 s timer interpolates the progress bar between events.
-
-## Layout
-
-| Path | Purpose |
-| --- | --- |
-| `Sources/Float/Pomodoro/` | `PomodoroEngine` state machine, config, SwiftData models |
-| `Sources/Float/Stats/` | `StatsService` aggregation + chart view |
-| `Sources/Float/Spotify/` | Web Playback SDK engine (`WKWebView`), local page server, Web API client, OAuth (PKCE), view model |
-| `Sources/Float/Panel/` | `FloatingPanel` (`NSPanel`) + root `PanelView` |
-| `Sources/Float/Settings/` | `AppSettings` + settings window |
-| `Sources/Float/AppServices.swift` | composition root; wires engine → notifications / persistence / Spotify |
-| `Tests/FloatTests/` | engine + stats unit tests |
-# float
+- **`AGENTS.md`** — start here (build/test/run, conventions, gotchas). `CLAUDE.md`
+  just imports it.
+- **`docs/ARCHITECTURE.md`** — module map and data flow.
+- **`docs/SPOTIFY.md`** — the Spotify integration in detail.

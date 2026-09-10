@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 enum PanelTab: String, CaseIterable, Identifiable {
     case timer = "Timer"
@@ -84,6 +85,19 @@ struct SettingsDrawerButton: View {
     }
 }
 
+struct QuitButton: View {
+    var body: some View {
+        Button {
+            NSApp.terminate(nil)
+        } label: {
+            Image(systemName: "xmark.circle.fill")
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.tertiary)
+        .help("Quit Float")
+    }
+}
+
 struct LayoutToggleButton: View {
     @EnvironmentObject private var panelState: PanelState
 
@@ -158,6 +172,7 @@ private struct ExpandedPanelView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 10) {
+                QuitButton()
                 Text("Float")
                     .font(.system(size: 13, weight: .semibold, design: .rounded))
                     .foregroundStyle(.secondary)
@@ -214,6 +229,12 @@ private struct CompactPanelView: View {
             .foregroundStyle(.tertiary)
             .padding(.top, 3)
             .padding(.trailing, 4)
+        }
+        .overlay(alignment: .topLeading) {
+            QuitButton()
+                .font(.system(size: 8))
+                .padding(.top, 3)
+                .padding(.leading, 4)
         }
     }
 }

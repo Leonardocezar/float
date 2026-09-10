@@ -1,6 +1,10 @@
 import AppKit
 import SwiftUI
 
+private final class FirstMouseHostingView<Content: View>: NSHostingView<Content> {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+}
+
 final class FloatingPanel<Content: View>: NSPanel {
     private static var originKey: String { "panel.origin" }
 
@@ -22,7 +26,7 @@ final class FloatingPanel<Content: View>: NSPanel {
         backgroundColor = .clear
         hasShadow = true
 
-        let hosting = NSHostingView(rootView: content())
+        let hosting = FirstMouseHostingView(rootView: content())
         hosting.autoresizingMask = [.width, .height]
         contentView = hosting
 

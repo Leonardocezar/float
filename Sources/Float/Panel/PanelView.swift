@@ -43,7 +43,7 @@ struct PanelView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(.ultraThinMaterial)
+        .background(Dracula.background)
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -85,7 +85,7 @@ struct MenuBarPreviewView: View {
         }
         .padding(.vertical, 8)
         .frame(width: PanelState.compactSize.width, height: PanelState.compactSize.height)
-        .background(.ultraThinMaterial)
+        .background(Dracula.background)
     }
 }
 
@@ -178,7 +178,7 @@ private struct EdgeTab: View {
                 .font(.system(size: 10, weight: .bold))
                 .foregroundStyle(.secondary)
                 .frame(width: 16, height: 46)
-                .background(.ultraThinMaterial, in: shape)
+                .background(Dracula.currentLine, in: shape)
                 .overlay(shape.strokeBorder(.white.opacity(0.1)))
         }
         .buttonStyle(.plain)
@@ -268,14 +268,14 @@ private struct CompactPomodoroView: View {
             Text(engine.phase.title.uppercased())
                 .font(.system(size: 7, weight: .bold, design: .rounded))
                 .tracking(0.8)
-                .foregroundStyle(engine.phase.isBreak ? Color.teal : Color.accentColor)
+                .foregroundStyle(engine.phase.isBreak ? Dracula.cyan : Color.accentColor)
 
             Text(timeString)
                 .font(.system(size: 20, weight: .semibold, design: .rounded))
                 .monospacedDigit()
 
             ProgressView(value: progress)
-                .tint(engine.phase.isBreak ? Color.teal : Color.accentColor)
+                .tint(engine.phase.isBreak ? Dracula.cyan : Color.accentColor)
                 .scaleEffect(y: 0.55)
                 .frame(maxWidth: 78)
 
@@ -312,7 +312,7 @@ private struct CompactSpotifyView: View {
         VStack(spacing: 4) {
             if let np = spotify.nowPlaying {
                 AsyncImage(url: np.artworkURL) { $0.resizable().aspectRatio(contentMode: .fill) }
-                    placeholder: { Rectangle().fill(.quaternary) }
+                    placeholder: { Rectangle().fill(Dracula.currentLine) }
                     .frame(width: 30, height: 30)
                     .clipShape(RoundedRectangle(cornerRadius: 4))
 

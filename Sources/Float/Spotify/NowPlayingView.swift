@@ -64,7 +64,7 @@ struct NowPlayingView: View {
         AsyncImage(url: url) { image in
             image.resizable().aspectRatio(contentMode: .fill)
         } placeholder: {
-            Rectangle().fill(.quaternary)
+            Rectangle().fill(Dracula.currentLine)
         }
         .frame(width: 34, height: 34)
         .clipShape(RoundedRectangle(cornerRadius: 5))

@@ -16,15 +16,15 @@ struct TimerView: View {
             Text(engine.phase.title.uppercased())
                 .font(.system(size: 11, weight: .bold, design: .rounded))
                 .tracking(1.5)
-                .foregroundStyle(engine.phase.isBreak ? Color.teal : Color.accentColor)
+                .foregroundStyle(engine.phase.isBreak ? Dracula.cyan : Color.accentColor)
 
             ZStack {
                 Circle()
-                    .stroke(.quaternary, lineWidth: 8)
+                    .stroke(Dracula.currentLine, lineWidth: 8)
                 Circle()
                     .trim(from: 0, to: progress)
                     .stroke(
-                        engine.phase.isBreak ? Color.teal : Color.accentColor,
+                        engine.phase.isBreak ? Dracula.cyan : Color.accentColor,
                         style: StrokeStyle(lineWidth: 8, lineCap: .round)
                     )
                     .rotationEffect(.degrees(-90))

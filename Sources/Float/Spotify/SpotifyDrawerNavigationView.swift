@@ -43,12 +43,12 @@ struct SpotifyDrawerNavigationView: View {
             if let notice = spotify.notice {
                 noticeBar(notice, color: Color.accentColor)
             } else if let err = spotify.lastError {
-                noticeBar(err, color: .red)
+                noticeBar(err, color: Dracula.red)
                     .onTapGesture { spotify.lastError = nil }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(.black.opacity(0.14))
+        .background(Dracula.currentLine.opacity(0.3))
         .onAppear { spotify.drawerDidOpen() }
         .onDisappear { spotify.drawerDidClose() }
         .alert("New playlist", isPresented: $showNewPlaylist) {
@@ -561,7 +561,7 @@ struct SpotifyDrawerNavigationView: View {
             .foregroundStyle(.secondary)
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
-            .background(.quaternary, in: Capsule())
+            .background(Dracula.currentLine, in: Capsule())
     }
 
     private func browseRow(_ item: SpotifyBrowseItem) -> some View {
@@ -845,7 +845,7 @@ private struct ArtworkThumbnail: View {
             }
         }
         .frame(width: size, height: size)
-        .background(.quaternary.opacity(0.5))
+        .background(Dracula.currentLine.opacity(0.5))
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
     }
 

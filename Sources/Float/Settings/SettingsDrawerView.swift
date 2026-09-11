@@ -19,7 +19,7 @@ struct SettingsDrawerView: View {
             .scrollContentBackground(.hidden)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(.black.opacity(0.14))
+        .background(Dracula.currentLine.opacity(0.3))
     }
 
     private var header: some View {
@@ -64,16 +64,16 @@ struct SettingsDrawerView: View {
             if spotify.isAuthorized {
                 HStack {
                     Label("Connected", systemImage: "checkmark.seal.fill")
-                        .foregroundStyle(.green)
+                        .foregroundStyle(Dracula.green)
                     Spacer()
                     Button("Disconnect") { spotify.disconnect() }
                         .controlSize(.small)
                 }
                 LabeledContent("Player") {
                     if spotify.needsActivation {
-                        Text("needs activation").foregroundStyle(.orange)
+                        Text("needs activation").foregroundStyle(Dracula.orange)
                     } else if spotify.isPlayerReady {
-                        Text("ready").foregroundStyle(.green)
+                        Text("ready").foregroundStyle(Dracula.green)
                     } else {
                         Text("starting…").foregroundStyle(.secondary)
                     }
@@ -97,7 +97,7 @@ struct SettingsDrawerView: View {
         }
 
         if let err = spotify.lastError {
-            Text(err).font(.caption2).foregroundStyle(.red)
+            Text(err).font(.caption2).foregroundStyle(Dracula.red)
         }
     }
 

@@ -39,7 +39,7 @@ struct StatsView: View {
                     .frame(height: 130)
                 }
                 .padding(10)
-                .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 10))
+                .background(Dracula.currentLine.opacity(0.4), in: RoundedRectangle(cornerRadius: 10))
             }
             .padding(12)
         }
@@ -53,6 +53,6 @@ struct StatsView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(10)
-        .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 10))
+        .background(Dracula.currentLine.opacity(0.4), in: RoundedRectangle(cornerRadius: 10))
     }
 }

@@ -91,8 +91,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard statusItem == nil else { return }
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         if let button = item.button {
-            let image = NSImage(systemSymbolName: "timer", accessibilityDescription: "Float")
-            image?.isTemplate = true
+            let image = NSImage(named: "StatusBarIcon")
+            image?.size = NSSize(width: 18, height: 18)
+            image?.isTemplate = false
+            image?.accessibilityDescription = "Float"
             button.image = image
             button.target = self
             button.action = #selector(statusItemClicked)

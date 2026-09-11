@@ -106,6 +106,7 @@ See `docs/SPOTIFY.md` for the full picture. Files:
 | `SpotifyWebClient` | Web API wrapper + 429 backoff; parses JSON to typed models |
 | `PlaylistStore` | `actor`; on-disk JSON cache of the playlist list + track listings |
 | `PlaylistSyncService` | `@MainActor`; fills/refreshes the store, manually triggered only (no timer) |
+| `FavoritesStore` | `actor`; on-disk JSON cache of followed artists |
 | `SpotifyModel` | `@MainActor ObservableObject`; the facade the UI binds to |
 | `NowPlayingView` | the now-playing bar |
 | `SpotifyDrawerNavigationView` | the right drawer (Playing / Search / Library, playlist detail) |

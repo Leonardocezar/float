@@ -129,4 +129,11 @@ with" trailers. Do not push; the maintainer reviews and pushes.
   so no TLS needed). It also needs `NSAllowsLocalNetworking` (set in `project.yml`).
 - **429**: `SpotifyWebClient` sets `backoffUntil` from `Retry-After` and refuses
   requests until it clears (`isRateLimited`). Respect it in any new call site.
+- **Dev-mode apps permanently lost `GET /artists/{id}/albums`,
+  `/artists/{id}/top-tracks`, `GET /artists` (batch), `GET /users/{id}`, and
+  `GET /browse/*`** in Spotify's February 2026 API changes — always 403, no
+  fix. `popularity`/`followers` were also stripped from responses. `/search`
+  survived, so artist albums/tracks are approximated via a scoped
+  `artist:"…"` search (`searchAlbumsByArtist`/`searchTracksByArtist`). Check
+  Spotify's migration notes before adding any new artist/browse call.
 - After `defaults write com.leonardocezar.Float …`, run `killall cfprefsd`.

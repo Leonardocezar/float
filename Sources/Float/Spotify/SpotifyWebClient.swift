@@ -42,11 +42,21 @@ struct SpotifyBrowseItem: Identifiable, Equatable, Hashable {
     var imageURL: URL? = nil
 }
 
+struct SpotifyArtist: Identifiable, Equatable, Hashable, Codable {
+    var id: String
+    var name: String
+    var uri: String
+    var imageURL: URL? = nil
+    var genres: [String] = []
+    var followers: Int? = nil
+}
+
 struct SpotifySearchResults: Equatable {
     var tracks: [SpotifyTrack] = []
     var playlists: [SpotifyBrowseItem] = []
     var albums: [SpotifyBrowseItem] = []
-    var isEmpty: Bool { tracks.isEmpty && playlists.isEmpty && albums.isEmpty }
+    var artists: [SpotifyArtist] = []
+    var isEmpty: Bool { tracks.isEmpty && playlists.isEmpty && albums.isEmpty && artists.isEmpty }
 }
 
 final class SpotifyWebClient {
@@ -117,7 +127,7 @@ final class SpotifyWebClient {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return SpotifySearchResults() }
         let q = trimmed.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? trimmed
-        var path = "search?q=\(q)&type=track,playlist,album&limit=\(min(limit, 10))"
+        var path = "search?q=\(q)&type=track,playlist,album,artist&limit=\(min(limit, 10))"
         if let market = try? await currentUserCountry() { path += "&market=\(market)" }
         let json = try await get(path)
 
@@ -131,7 +141,23 @@ final class SpotifyWebClient {
         if let items = (json["albums"] as? [String: Any])?["items"] as? [Any] {
             r.albums = items.compactMap { Self.browseItem($0 as? [String: Any], kind: .album) }
         }
+        if let items = (json["artists"] as? [String: Any])?["items"] as? [[String: Any]] {
+            r.artists = items.compactMap { Self.artist(from: $0) }
+        }
         return r
+    }
+
+    static func artist(from obj: [String: Any]?) -> SpotifyArtist? {
+        guard let obj,
+              let id = obj["id"] as? String,
+              let name = obj["name"] as? String,
+              let uri = obj["uri"] as? String else { return nil }
+        return SpotifyArtist(
+            id: id, name: name, uri: uri,
+            imageURL: Self.largestImage(obj["images"] as? [[String: Any]]),
+            genres: obj["genres"] as? [String] ?? [],
+            followers: (obj["followers"] as? [String: Any])?["total"] as? Int
+        )
     }
 
     static func browseItem(_ obj: [String: Any]?, kind: SpotifyBrowseItem.Kind) -> SpotifyBrowseItem? {
@@ -163,6 +189,16 @@ final class SpotifyWebClient {
             (($0["width"] as? Int) ?? .max) < (($1["width"] as? Int) ?? .max)
         }
         guard let urlString = smallestFirst.first?["url"] as? String else { return nil }
+        return URL(string: urlString)
+    }
+
+    /// Picks the largest image Spotify offers — for a bigger, non-drawer-row preview.
+    private static func largestImage(_ images: [[String: Any]]?) -> URL? {
+        guard let images, !images.isEmpty else { return nil }
+        let largestFirst = images.sorted {
+            (($0["width"] as? Int) ?? 0) > (($1["width"] as? Int) ?? 0)
+        }
+        guard let urlString = largestFirst.first?["url"] as? String else { return nil }
         return URL(string: urlString)
     }
 
@@ -285,6 +321,50 @@ final class SpotifyWebClient {
         return PlaylistHeader(name: name, total: countJson["total"] as? Int ?? 0)
     }
 
+    struct PlaylistDetails: Equatable {
+        var name: String
+        var description: String?
+        var ownerName: String?
+        var followers: Int?
+        var total: Int
+        var imageURL: URL?
+        var isPublic: Bool?
+        var collaborative: Bool
+    }
+
+    /// Metadata only — works for any playlist, owned or not. Only the track
+    /// listing itself (`playlistPage`) is restricted to owner/collaborator.
+    func playlistDetails(id: String) async throws -> PlaylistDetails {
+        let json = try await get("playlists/\(id)?fields=name,description,owner(display_name),followers.total,images,public,collaborative,tracks.total")
+        let owner = json["owner"] as? [String: Any]
+        let description = (json["description"] as? String)
+            .map(Self.decodeHTMLEntities)
+            .flatMap { $0.isEmpty ? nil : $0 }
+        return PlaylistDetails(
+            name: json["name"] as? String ?? "Playlist",
+            description: description,
+            ownerName: owner?["display_name"] as? String,
+            followers: (json["followers"] as? [String: Any])?["total"] as? Int,
+            total: (json["tracks"] as? [String: Any])?["total"] as? Int ?? 0,
+            imageURL: Self.largestImage(json["images"] as? [[String: Any]]),
+            isPublic: json["public"] as? Bool,
+            collaborative: json["collaborative"] as? Bool ?? false
+        )
+    }
+
+    /// Playlist descriptions come back with HTML entities and the occasional
+    /// `<a href="…">` mention link — strip both for plain-text display.
+    private static func decodeHTMLEntities(_ s: String) -> String {
+        var result = s
+        for (entity, replacement) in ["&amp;": "&", "&quot;": "\"", "&#39;": "'", "&apos;": "'", "&lt;": "<", "&gt;": ">"] {
+            result = result.replacingOccurrences(of: entity, with: replacement)
+        }
+        while let range = result.range(of: "<[^>]+>", options: .regularExpression) {
+            result.removeSubrange(range)
+        }
+        return result.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     struct PlaylistPage { var tracks: [SpotifyTrack]; var total: Int; var hasMore: Bool }
 
     func playlistPage(id: String, offset: Int, limit: Int = 50) async throws -> PlaylistPage {
@@ -314,6 +394,77 @@ final class SpotifyWebClient {
             return track
         }
         return SpotifyContextTracks(name: name, tracks: tracks)
+    }
+
+    /// `GET /artists/{id}`, `/artists/{id}/albums` and `/artists/{id}/top-tracks`
+    /// were all removed for Development Mode apps in Spotify's February 2026
+    /// API changes — permanently 403 for a personal, non-extended-quota app
+    /// like this one. `/search` is not on that list, so an artist's albums and
+    /// tracks are approximated with a scoped `artist:"…"` search instead.
+    func searchAlbumsByArtist(_ artistName: String, limit: Int = 10) async throws -> [SpotifyBrowseItem] {
+        let raw = "artist:\"\(artistName)\""
+        let q = raw.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? raw
+        var path = "search?q=\(q)&type=album&limit=\(min(limit, 10))"
+        if let market = try? await currentUserCountry() { path += "&market=\(market)" }
+        let json = try await get(path)
+        let items = (json["albums"] as? [String: Any])?["items"] as? [Any] ?? []
+        var seenNames = Set<String>()
+        var out: [SpotifyBrowseItem] = []
+        for entry in items {
+            guard let album = Self.browseItem(entry as? [String: Any], kind: .album) else { continue }
+            // Spotify often lists the same album multiple times (regional
+            // re-releases, deluxe/remaster duplicates) — keep the first.
+            guard seenNames.insert(album.name.lowercased()).inserted else { continue }
+            out.append(album)
+        }
+        return out
+    }
+
+    func searchTracksByArtist(_ artistName: String, limit: Int = 10) async throws -> [SpotifyTrack] {
+        let raw = "artist:\"\(artistName)\""
+        let q = raw.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? raw
+        var path = "search?q=\(q)&type=track&limit=\(min(limit, 10))"
+        if let market = try? await currentUserCountry() { path += "&market=\(market)" }
+        let json = try await get(path)
+        let items = (json["tracks"] as? [String: Any])?["items"] as? [[String: Any]] ?? []
+        return items.compactMap { Self.track(from: $0) }
+    }
+
+    struct FollowedArtistsPage { var artists: [SpotifyArtist]; var nextAfter: String? }
+
+    /// Cursor-paginated, unlike everything else here (Spotify's `/me/following`
+    /// has no `offset`) — walk `cursors.after` until it stops appearing.
+    func followedArtists(after: String? = nil, limit: Int = 50) async throws -> FollowedArtistsPage {
+        var path = "me/following?type=artist&limit=\(min(limit, 50))"
+        if let after { path += "&after=\(after)" }
+        let json = try await get(path)
+        let artists = json["artists"] as? [String: Any] ?? [:]
+        let items = artists["items"] as? [[String: Any]] ?? []
+        let cursors = artists["cursors"] as? [String: Any]
+        return FollowedArtistsPage(
+            artists: items.compactMap { Self.artist(from: $0) },
+            nextAfter: cursors?["after"] as? String
+        )
+    }
+
+    func allFollowedArtists(max: Int = 500) async throws -> [SpotifyArtist] {
+        var out: [SpotifyArtist] = []
+        var after: String?
+        while out.count < max {
+            let page = try await followedArtists(after: after)
+            out += page.artists
+            guard let next = page.nextAfter, !page.artists.isEmpty else { break }
+            after = next
+        }
+        return out
+    }
+
+    func followArtist(id: String) async throws {
+        _ = try await send("PUT", "me/following?type=artist&ids=\(id)", json: nil)
+    }
+
+    func unfollowArtist(id: String) async throws {
+        _ = try await send("DELETE", "me/following?type=artist&ids=\(id)", json: nil)
     }
 
     private static func track(from obj: [String: Any]?) -> SpotifyTrack? {

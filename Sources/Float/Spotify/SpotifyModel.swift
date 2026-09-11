@@ -22,14 +22,27 @@ final class SpotifyModel: ObservableObject {
     @Published private(set) var isSearching = false
     @Published private(set) var openedList: SpotifyBrowseItem?
     @Published private(set) var openedListTracks: [SpotifyTrack] = []
+    @Published private(set) var openedListDetails: SpotifyWebClient.PlaylistDetails?
     @Published private(set) var isLoadingList = false
     @Published private(set) var openListError: String?
     @Published private(set) var openedListComplete = true
     @Published private(set) var openedListTotal = 0
     @Published private(set) var myUserID: String?
 
+    @Published private(set) var openedArtist: SpotifyArtist?
+    @Published private(set) var openedArtistAlbums: [SpotifyBrowseItem] = []
+    @Published private(set) var openedArtistTopTracks: [SpotifyTrack] = []
+    @Published private(set) var isLoadingArtist = false
+    @Published private(set) var openArtistError: String?
+
+    @Published private(set) var favoriteArtists: [SpotifyArtist] = []
+    @Published private(set) var favoriteArtistsFromCache = false
+    @Published private(set) var favoriteArtistsUpdatedAt: Date?
+    @Published private(set) var syncingFavorites = false
+
     let store: PlaylistStore
     let sync: PlaylistSyncService
+    let favoritesStore: FavoritesStore
 
     private var openedPlaylistID: String?
     private var contextPlaylistID: String?
@@ -58,12 +71,13 @@ final class SpotifyModel: ObservableObject {
     var playerLog: String? { engine.lastLog }
 
     init(engine: SpotifyPlaybackEngine, web: SpotifyWebClient, auth: SpotifyAuth,
-         store: PlaylistStore, sync: PlaylistSyncService) {
+         store: PlaylistStore, sync: PlaylistSyncService, favoritesStore: FavoritesStore) {
         self.engine = engine
         self.web = web
         self.auth = auth
         self.store = store
         self.sync = sync
+        self.favoritesStore = favoritesStore
 
         Task { [weak self] in
             await store.setOnChange { id in
@@ -99,6 +113,7 @@ final class SpotifyModel: ObservableObject {
         if auth.isAuthorized {
             Task { await loadPlaylists() }
         }
+        loadFavoriteArtistsFromCache()
         ticker?.invalidate()
 
         let t = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
@@ -184,6 +199,7 @@ final class SpotifyModel: ObservableObject {
     private func offlineSearch(_ q: String) async {
         let hits = await store.localSearch(q)
         let pls = await store.localPlaylists(matching: q)
+        let artists = await favoritesStore.localSearch(q)
         var r = SpotifySearchResults()
         r.tracks = hits.map(\.track)
         r.playlists = pls.map {
@@ -193,6 +209,7 @@ final class SpotifyModel: ObservableObject {
                               ownerID: $0.ownerID, collaborative: $0.collaborative,
                               imageURL: $0.imageURL)
         }
+        r.artists = artists
         searchResults = r
         searchIsOffline = true
     }
@@ -215,8 +232,10 @@ final class SpotifyModel: ObservableObject {
     }
 
     func openList(_ item: SpotifyBrowseItem) {
+        closeArtist()
         openedList = item
         openedListTracks = []
+        openedListDetails = nil
         openListError = nil
         openedListComplete = true
         openedListTotal = 0
@@ -233,6 +252,23 @@ final class SpotifyModel: ObservableObject {
                     self.openListError = self.friendlyOpenError(error)
                 }
                 self.isLoadingList = false
+            }
+            return
+        }
+
+        guard canBrowse(item) else {
+            isLoadingList = true
+            Task {
+                do {
+                    let details = try await web.playlistDetails(id: item.id)
+                    guard self.openedPlaylistID == item.id else { return }
+                    self.openedListDetails = details
+                    self.openedListTotal = details.total
+                } catch {
+                    guard self.openedPlaylistID == item.id else { return }
+                    self.openListError = self.friendlyOpenError(error)
+                }
+                if self.openedPlaylistID == item.id { self.isLoadingList = false }
             }
             return
         }
@@ -264,6 +300,7 @@ final class SpotifyModel: ObservableObject {
     func closeList() {
         openedList = nil
         openedListTracks = []
+        openedListDetails = nil
         openListError = nil
         openedPlaylistID = nil
         openedListComplete = true
@@ -272,6 +309,127 @@ final class SpotifyModel: ObservableObject {
     func refreshOpenedList() {
         guard let item = openedList, item.kind == .playlist else { return }
         Task { await sync.syncPlaylist(id: item.id, force: true) }
+    }
+
+    /// Spotify removed `/artists/{id}/albums` and `/artists/{id}/top-tracks`
+    /// for Development Mode apps (Feb 2026) — both always 403 here, so albums
+    /// and tracks are approximated via a scoped `artist:"…"` search instead.
+    /// Albums, then tracks — one request in flight at a time (never
+    /// concurrently) to keep this screen's opening cost low.
+    func openArtist(_ artist: SpotifyArtist) {
+        closeList()
+        openedArtist = artist
+        openedArtistAlbums = []
+        openedArtistTopTracks = []
+        openArtistError = nil
+        isLoadingArtist = true
+        let id = artist.id
+        let name = artist.name
+        Task {
+            do {
+                let albums = try await web.searchAlbumsByArtist(name)
+                if self.openedArtist?.id == id { self.openedArtistAlbums = albums }
+            } catch {
+                // Albums are secondary — a failure here shouldn't block tracks.
+            }
+
+            guard self.openedArtist?.id == id, !self.web.isRateLimited else {
+                if self.openedArtist?.id == id { self.isLoadingArtist = false }
+                return
+            }
+            try? await Task.sleep(for: .milliseconds(250))
+
+            do {
+                let tracks = try await web.searchTracksByArtist(name)
+                guard self.openedArtist?.id == id else { return }
+                self.openedArtistTopTracks = tracks
+            } catch {
+                guard self.openedArtist?.id == id else { return }
+                self.openArtistError = error.localizedDescription
+            }
+            if self.openedArtist?.id == id { self.isLoadingArtist = false }
+        }
+    }
+
+    func closeArtist() {
+        openedArtist = nil
+        openedArtistAlbums = []
+        openedArtistTopTracks = []
+        openArtistError = nil
+    }
+
+    func isFavoriteArtist(_ id: String) -> Bool {
+        favoriteArtists.contains { $0.id == id }
+    }
+
+    /// Optimistic follow/unfollow — updates the cache and the published list
+    /// immediately, and rolls back if the API call fails.
+    func toggleFavoriteArtist(_ artist: SpotifyArtist) {
+        let wasFavorite = isFavoriteArtist(artist.id)
+        if wasFavorite {
+            favoriteArtists.removeAll { $0.id == artist.id }
+        } else {
+            favoriteArtists.insert(artist, at: 0)
+        }
+        Task {
+            do {
+                if wasFavorite {
+                    try await web.unfollowArtist(id: artist.id)
+                    await favoritesStore.remove(id: artist.id)
+                } else {
+                    try await web.followArtist(id: artist.id)
+                    await favoritesStore.add(artist)
+                }
+                self.favoriteArtistsUpdatedAt = .now
+            } catch {
+                if wasFavorite {
+                    self.favoriteArtists.insert(artist, at: 0)
+                } else {
+                    self.favoriteArtists.removeAll { $0.id == artist.id }
+                }
+                self.lastError = self.friendlyFollowError(error)
+            }
+        }
+    }
+
+    private func friendlyFollowError(_ error: Error) -> String {
+        let msg = error.localizedDescription
+        if msg.contains("403") {
+            return "Reconnect Spotify in Settings to enable following artists."
+        }
+        return msg
+    }
+
+    /// Cheap, local-only hydration from disk — no network. The actual refresh
+    /// against Spotify is `syncFavoriteArtists()`, manual-only like playlists.
+    private func loadFavoriteArtistsFromCache() {
+        Task {
+            let cached = await favoritesStore.artists
+            guard !cached.isEmpty else { return }
+            self.favoriteArtists = cached
+            self.favoriteArtistsFromCache = true
+            self.favoriteArtistsUpdatedAt = await favoritesStore.updatedAt
+        }
+    }
+
+    /// Re-fetches the full followed-artists list from Spotify. No background
+    /// timer — triggered only by the Library tab's refresh button.
+    @discardableResult
+    func syncFavoriteArtists() async -> Bool {
+        guard auth.isAuthorized, !web.isRateLimited, !syncingFavorites else { return false }
+        syncingFavorites = true
+        defer { syncingFavorites = false }
+        do {
+            let fresh = try await web.allFollowedArtists()
+            favoriteArtists = fresh
+            favoriteArtistsFromCache = false
+            favoriteArtistsUpdatedAt = .now
+            await favoritesStore.replaceAll(fresh)
+            return true
+        } catch {
+            if favoriteArtists.isEmpty { lastError = error.localizedDescription }
+            return false
+        }
     }
 
     private func friendlyOpenError(_ error: Error) -> String {
@@ -373,6 +531,7 @@ final class SpotifyModel: ObservableObject {
         drawerPollTimer?.invalidate()
         drawerPollTimer = nil
         closeList()
+        closeArtist()
         searchResults = SpotifySearchResults()
     }
 
@@ -481,8 +640,12 @@ final class SpotifyModel: ObservableObject {
         playlists = []
         playlistsFromCache = false
         playlistsUpdatedAt = nil
+        favoriteArtists = []
+        favoriteArtistsFromCache = false
+        favoriteArtistsUpdatedAt = nil
         searchResults = SpotifySearchResults()
         Task { await store.clear() }
+        Task { await favoritesStore.clear() }
     }
 
     private var playlistsLoadedAt: Date = .distantPast

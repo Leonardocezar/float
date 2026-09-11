@@ -31,6 +31,8 @@ final class SpotifyAuth: ObservableObject {
         "playlist-modify-public",
         "user-library-read",
         "user-library-modify",
+        "user-follow-read",
+        "user-follow-modify",
     ].joined(separator: " ")
 
     @Published private(set) var isAuthorized: Bool

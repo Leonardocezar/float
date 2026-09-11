@@ -42,11 +42,13 @@ user-read-playback-state  user-modify-playback-state  user-read-currently-playin
 playlist-read-private  playlist-read-collaborative
 playlist-modify-private  playlist-modify-public
 user-library-read  user-library-modify
+user-follow-read  user-follow-modify
 ```
 
-`user-read-private` is required for `/search`. Editing scopes were added later,
-so a user who connected before that must **disconnect and reconnect** — playlist
-add/create 403s otherwise, and `SpotifyModel.friendlyModifyError` says so.
+`user-read-private` is required for `/search`. Editing/follow scopes were added
+later, so a user who connected before they existed must **disconnect and
+reconnect** — playlist add/create and follow/unfollow 403 otherwise.
+`SpotifyModel.friendlyModifyError` / `friendlyFollowError` say so.
 
 ## Playback — Web Playback SDK
 
@@ -91,11 +93,16 @@ Endpoints in use:
 | transfer | `PUT /me/player` | `{device_ids:[id], play}` |
 | like | `PUT /me/tracks?ids=…` | |
 | playlists | `GET /me/playlists?limit=50&offset=…` | paginated in `allUserPlaylists` |
-| playlist header | `GET /playlists/{id}?fields=name,snapshot_id` | plain `GET /playlists/{id}` fallback |
+| playlist header | `GET /playlists/{id}?fields=name,tracks.total` | `total`, not `snapshot_id`, drives re-sync |
+| playlist details | `GET /playlists/{id}?fields=name,description,owner(display_name),followers.total,images,public,collaborative,tracks.total` | metadata only — works for playlists you don't own |
 | playlist items | `GET /playlists/{id}/items?limit=50&offset=…&additional_types=track&market=…` | see below |
-| search | `GET /search?q=…&type=track,playlist,album&limit=10&market=…` | |
+| search | `GET /search?q=…&type=track,playlist,album,artist&limit=10&market=…` | |
 | add to playlist | `POST /playlists/{id}/items` | `{uris:[…]}` |
 | create playlist | `POST /users/{id}/playlists` | `{name, public:false}` |
+| artist's albums (approx.) | `GET /search?q=artist:"…"&type=album&limit=10&market=…` | `/artists/{id}/albums` is dev-mode-dead — see below |
+| artist's tracks (approx.) | `GET /search?q=artist:"…"&type=track&limit=10&market=…` | `/artists/{id}/top-tracks` is dev-mode-dead — see below |
+| followed artists | `GET /me/following?type=artist&limit=50&after=…` | **cursor**-paginated, not offset — see below |
+| follow / unfollow artist | `PUT` / `DELETE /me/following?type=artist&ids=…` | no body |
 
 ### Playlist-endpoint rules (learned the hard way)
 
@@ -111,6 +118,28 @@ Endpoints in use:
 - `market` matters for search/items — the user token supplies the country, but
   we pass it explicitly anyway.
 - Search `limit` is capped at 10 by the schema (was 20 → 400).
+- **`GET /playlists/{id}` itself has no ownership restriction** — only the
+  nested track listing does. `playlistDetails` uses this to show a read-only
+  preview (cover, description, owner, follower count) for playlists Float
+  can't open, instead of just an error.
+- **`/me/following` paginates by cursor (`cursors.after`), not `offset`** —
+  the only cursor-paginated endpoint here. `allFollowedArtists` walks it until
+  a page comes back without a next cursor.
+- **`GET /artists/{id}/albums` and `GET /artists/{id}/top-tracks` are gone for
+  Development Mode apps** (Spotify's February 2026 dev-mode changes — see
+  their migration guide) — always **403**, permanently, for a personal app
+  like this one; no scope or header fixes it. Same migration also stripped
+  `popularity`/`followers` from artist payloads (`SpotifyArtist.followers` is
+  `nil` more often than not now) and removed `GET /artists` batch, `GET
+  /users/{id}`, and `GET /browse/*`. **`/search` was not on that list**, so
+  `searchAlbumsByArtist` / `searchTracksByArtist` approximate the artist page
+  with a scoped `artist:"…"` search instead of the dead endpoints. Before
+  reaching for any new artist/browse endpoint, check whether it survived that
+  migration first.
+- **`openArtist` fetches albums, then tracks — never concurrently.** One
+  request in flight at a time, per the Web API rate-limit guidance (lazy load,
+  avoid bursts); a 250 ms gap sits between the two, same idea as the
+  playlist-sync request gap.
 
 ## Local cache + manual sync
 
@@ -141,13 +170,35 @@ The drawer reads the cache first — a cached playlist opens, and the Library li
 renders, with **zero** API calls; `loadPlaylists`/`search` fall back to the cache
 when the API is unreachable or rate-limited. `disconnect()` clears the store.
 
+### Favorite artists
+
+`FavoritesStore` (`actor`) mirrors `PlaylistStore` but for followed artists →
+`~/Library/Application Support/Float/favorite-artists-cache.json`,
+`{ artists: [SpotifyArtist], updatedAt }`.
+
+Same manual-only philosophy as playlists, split across two calls on
+`SpotifyModel`:
+
+- `loadFavoriteArtistsFromCache()` — local-only, no network, called once from
+  `start()` so the Library tab's Artists section is never empty on launch.
+- `syncFavoriteArtists()` — the actual `GET /me/following` walk
+  (`web.allFollowedArtists`), replacing the cache wholesale. **No timer** —
+  bound only to the Artists section's ↻ button.
+- `toggleFavoriteArtist` follows/unfollows optimistically (updates
+  `favoriteArtists` and the cache immediately, rolls back on API failure) so
+  the star in search results and the artist detail screen respond instantly.
+
+Search's offline fallback also checks `favoritesStore.localSearch`, so a
+favorited artist's name still resolves while offline/rate-limited.
+
 ## `SpotifyModel` responsibilities
 
 - Transport: `playPause / next / previous / play / pause / seek` → engine.
-- `play(uri:)` — start a context (playlist/album) on the Float device.
+- `play(uri:)` — start a context (playlist/album/artist) on the Float device.
 - `search`, `openList` (playlist → store+sync, album → `contextTracks`),
-  `playDrawerTrack` / `playTrack(_:inContext:)`, `queue`, `addTrack(_:to:)`,
-  `createPlaylist(named:addingTrack:)`.
+  `openArtist` (profile + top tracks), `playDrawerTrack` / `playTrack(_:inContext:)`,
+  `queue`, `addTrack(_:to:)`, `createPlaylist(named:addingTrack:)`,
+  `toggleFavoriteArtist`.
 - `syncPlaybackSnapshot` — throttled `GET /me/player` (≥ 8 s apart, 20 s poll
   while the drawer is open) to keep `apiContextURI` fresh.
 - `notice` (transient success toast), `lastError` (shown in a red bar), both

@@ -29,6 +29,7 @@ final class AppServices: ObservableObject {
 
         let auth = SpotifyAuth(clientID: settings.spotifyClientID)
         let store = PlaylistStore()
+        let favoritesStore = FavoritesStore()
         let web = SpotifyWebClient(auth: auth, store: store)
         let sync = PlaylistSyncService(web: web, store: store, auth: auth)
         spotify = SpotifyModel(
@@ -36,7 +37,8 @@ final class AppServices: ObservableObject {
             web: web,
             auth: auth,
             store: store,
-            sync: sync
+            sync: sync,
+            favoritesStore: favoritesStore
         )
 
         settings.onPomodoroConfigChange = { [weak self] config in

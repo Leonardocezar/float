@@ -14,11 +14,18 @@ private enum LibraryFilter: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+private enum LibrarySection: String, CaseIterable, Identifiable {
+    case playlists = "Playlists"
+    case artists = "Artists"
+    var id: String { rawValue }
+}
+
 struct SpotifyDrawerNavigationView: View {
     @EnvironmentObject private var spotify: SpotifyModel
 
     @State private var tab: DrawerTab = .now
     @State private var libraryFilter: LibraryFilter = .all
+    @State private var librarySection: LibrarySection = .playlists
     @State private var searchText = ""
     @State private var listSearch = ""
     @State private var newPlaylistName = ""
@@ -85,6 +92,25 @@ struct SpotifyDrawerNavigationView: View {
                 .foregroundStyle(Color.accentColor)
             }
             .padding(.horizontal, 10).padding(.vertical, 8)
+        } else if let artist = spotify.openedArtist {
+            HStack(spacing: 8) {
+                Button { spotify.closeArtist() } label: {
+                    Image(systemName: "chevron.left").font(.system(size: 11, weight: .bold))
+                }
+                .buttonStyle(.plain)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(artist.name).font(.system(size: 12, weight: .semibold)).lineLimit(1)
+                    Text("Artist").font(.system(size: 9)).foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 0)
+                favoriteArtistButton(artist)
+                Button { spotify.playList(uri: artist.uri) } label: {
+                    Image(systemName: "play.fill").font(.system(size: 11))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Color.accentColor)
+            }
+            .padding(.horizontal, 10).padding(.vertical, 8)
         } else {
             HStack(spacing: 6) {
                 Picker("", selection: $tab) {
@@ -107,7 +133,9 @@ struct SpotifyDrawerNavigationView: View {
 
     @ViewBuilder
     private func body(for tab: DrawerTab) -> some View {
-        if spotify.openedList != nil {
+        if spotify.openedArtist != nil {
+            artistDetail
+        } else if spotify.openedList != nil {
             listDetail
         } else {
             switch tab {
@@ -212,7 +240,7 @@ struct SpotifyDrawerNavigationView: View {
         VStack(spacing: 0) {
             HStack(spacing: 6) {
                 Image(systemName: "magnifyingglass").font(.system(size: 10)).foregroundStyle(.secondary)
-                TextField("Songs, playlists, albums", text: $searchText)
+                TextField("Songs, artists, playlists, albums", text: $searchText)
                     .textFieldStyle(.plain)
                     .font(.system(size: 12))
                     .onSubmit { spotify.search(searchText) }
@@ -262,6 +290,11 @@ struct SpotifyDrawerNavigationView: View {
                             ForEach(spotify.searchResults.albums) { browseRow($0) }
                         }
                     }
+                    if !spotify.searchResults.artists.isEmpty {
+                        Section("Artists") {
+                            ForEach(spotify.searchResults.artists) { artistRow($0) }
+                        }
+                    }
                 }
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
@@ -272,34 +305,85 @@ struct SpotifyDrawerNavigationView: View {
     @ViewBuilder
     private var libraryView: some View {
         VStack(spacing: 0) {
-            filterBar
-            Divider()
-            libraryList
+            Picker("", selection: $librarySection) {
+                ForEach(LibrarySection.allCases) { Text($0.rawValue).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .padding(.horizontal, 8).padding(.top, 6)
+
+            if librarySection == .playlists {
+                filterBar
+                Divider()
+                libraryList
+            } else {
+                Divider().padding(.top, 6)
+                favoritesList
+            }
+
             HStack(spacing: 5) {
-                if spotify.sync.runningFullSync || !spotify.sync.syncing.isEmpty {
-                    ProgressView().controlSize(.mini)
-                }
-                if spotify.playlistsFromCache {
-                    Label(cacheAge(spotify.playlistsUpdatedAt), systemImage: "wifi.slash")
-                        .font(.system(size: 8))
-                        .foregroundStyle(.tertiary)
-                        .lineLimit(1)
+                if librarySection == .playlists {
+                    if spotify.sync.runningFullSync || !spotify.sync.syncing.isEmpty {
+                        ProgressView().controlSize(.mini)
+                    }
+                    if spotify.playlistsFromCache {
+                        Label(cacheAge(spotify.playlistsUpdatedAt), systemImage: "wifi.slash")
+                            .font(.system(size: 8))
+                            .foregroundStyle(.tertiary)
+                            .lineLimit(1)
+                    } else {
+                        Text(spotify.sync.status)
+                            .font(.system(size: 8, design: .monospaced))
+                            .foregroundStyle(.tertiary)
+                            .lineLimit(1)
+                    }
+                    Spacer()
+                    Button { Task { await spotify.sync.runFullSync() } } label: {
+                        Image(systemName: "arrow.clockwise").font(.system(size: 8))
+                    }
+                    .buttonStyle(.plain).foregroundStyle(.tertiary)
+                    .help("Sync playlists now")
+                    .disabled(spotify.sync.runningFullSync)
                 } else {
-                    Text(spotify.sync.status)
-                        .font(.system(size: 8, design: .monospaced))
-                        .foregroundStyle(.tertiary)
-                        .lineLimit(1)
+                    if spotify.syncingFavorites {
+                        ProgressView().controlSize(.mini)
+                    }
+                    if spotify.favoriteArtistsFromCache {
+                        Label(cacheAge(spotify.favoriteArtistsUpdatedAt), systemImage: "wifi.slash")
+                            .font(.system(size: 8))
+                            .foregroundStyle(.tertiary)
+                            .lineLimit(1)
+                    } else {
+                        Text("\(spotify.favoriteArtists.count) favorite artists")
+                            .font(.system(size: 8, design: .monospaced))
+                            .foregroundStyle(.tertiary)
+                            .lineLimit(1)
+                    }
+                    Spacer()
+                    Button { Task { await spotify.syncFavoriteArtists() } } label: {
+                        Image(systemName: "arrow.clockwise").font(.system(size: 8))
+                    }
+                    .buttonStyle(.plain).foregroundStyle(.tertiary)
+                    .help("Sync favorite artists now")
+                    .disabled(spotify.syncingFavorites)
                 }
-                Spacer()
-                Button { Task { await spotify.sync.runFullSync() } } label: {
-                    Image(systemName: "arrow.clockwise").font(.system(size: 8))
-                }
-                .buttonStyle(.plain).foregroundStyle(.tertiary)
-                .help("Sync playlists now")
-                .disabled(spotify.sync.runningFullSync)
             }
             .padding(.horizontal, 8).padding(.vertical, 4)
             .background(.white.opacity(0.03))
+        }
+    }
+
+    @ViewBuilder
+    private var favoritesList: some View {
+        if spotify.favoriteArtists.isEmpty {
+            empty("star", spotify.isAuthorized ? "No favorite artists yet" : "Connect Spotify in Settings")
+        } else {
+            List {
+                ForEach(spotify.favoriteArtists) { artistRow($0) }
+            }
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+            .refreshable { await spotify.syncFavoriteArtists() }
         }
     }
 
@@ -366,8 +450,10 @@ struct SpotifyDrawerNavigationView: View {
 
     @ViewBuilder
     private var listDetail: some View {
-        if spotify.isLoadingList && spotify.openedListTracks.isEmpty {
+        if spotify.isLoadingList && spotify.openedListTracks.isEmpty && spotify.openedListDetails == nil {
             loading
+        } else if let details = spotify.openedListDetails, spotify.openedListTracks.isEmpty {
+            playlistPreview(details)
         } else if spotify.openedListTracks.isEmpty {
             VStack(spacing: 10) {
                 Image(systemName: "lock").font(.title3)
@@ -414,11 +500,74 @@ struct SpotifyDrawerNavigationView: View {
         }
     }
 
+    private func playlistPreview(_ details: SpotifyWebClient.PlaylistDetails) -> some View {
+        ScrollView {
+            VStack(spacing: 10) {
+                ArtworkThumbnail(url: details.imageURL, size: 96, cornerRadius: 8,
+                                 fallback: "music.note.list")
+
+                Text(details.name)
+                    .font(.system(size: 13, weight: .semibold))
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+
+                if let owner = details.ownerName {
+                    Text("By \(owner)").font(.system(size: 10)).foregroundStyle(.secondary)
+                }
+
+                HStack(spacing: 6) {
+                    if details.collaborative {
+                        previewBadge("Collaborative")
+                    } else if details.isPublic == false {
+                        previewBadge("Private")
+                    }
+                    previewBadge("\(details.total) track\(details.total == 1 ? "" : "s")")
+                    if let followers = details.followers, followers > 0 {
+                        previewBadge("\(followers) follower\(followers == 1 ? "" : "s")")
+                    }
+                }
+
+                if let description = details.description {
+                    Text(description)
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .lineLimit(5)
+                }
+
+                if let list = spotify.openedList {
+                    Button {
+                        spotify.playList(uri: list.uri)
+                    } label: {
+                        Label("Play", systemImage: "play.fill").font(.system(size: 11))
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                }
+
+                Text("Spotify only lets Float open the track list of playlists you own or collaborate on.")
+                    .font(.system(size: 8))
+                    .foregroundStyle(.tertiary)
+                    .multilineTextAlignment(.center)
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity)
+        }
+    }
+
+    private func previewBadge(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 8, weight: .medium))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(.quaternary, in: Capsule())
+    }
+
     private func browseRow(_ item: SpotifyBrowseItem) -> some View {
-        let browsable = spotify.canBrowse(item)
-        return HStack(spacing: 8) {
+        HStack(spacing: 8) {
             Button {
-                if browsable { spotify.openList(item) } else { spotify.playList(uri: item.uri) }
+                spotify.openList(item)
             } label: {
                 HStack(spacing: 8) {
                     ArtworkThumbnail(url: item.imageURL, size: 30, cornerRadius: 5,
@@ -440,11 +589,126 @@ struct SpotifyDrawerNavigationView: View {
             .buttonStyle(.plain).foregroundStyle(.secondary)
 
             Image(systemName: "chevron.right").font(.system(size: 8)).foregroundStyle(.tertiary)
-                .opacity(browsable ? 1 : 0)
         }
         .padding(.vertical, 2)
         .listRowInsets(EdgeInsets(top: 3, leading: 8, bottom: 3, trailing: 8))
         .listRowSeparator(.hidden)
+    }
+
+    private func artistRow(_ artist: SpotifyArtist) -> some View {
+        HStack(spacing: 8) {
+            Button {
+                spotify.openArtist(artist)
+            } label: {
+                HStack(spacing: 8) {
+                    ArtworkThumbnail(url: artist.imageURL, size: 30, cornerRadius: 15, fallback: "person.fill")
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(artist.name).font(.system(size: 11, weight: .medium)).lineLimit(1)
+                        Text(artist.genres.first?.capitalized ?? "Artist")
+                            .font(.system(size: 9)).foregroundStyle(.secondary).lineLimit(1)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            favoriteArtistButton(artist)
+
+            Image(systemName: "chevron.right").font(.system(size: 8)).foregroundStyle(.tertiary)
+        }
+        .padding(.vertical, 2)
+        .listRowInsets(EdgeInsets(top: 3, leading: 8, bottom: 3, trailing: 8))
+        .listRowSeparator(.hidden)
+    }
+
+    private func favoriteArtistButton(_ artist: SpotifyArtist) -> some View {
+        let isFav = spotify.isFavoriteArtist(artist.id)
+        return Button { spotify.toggleFavoriteArtist(artist) } label: {
+            Image(systemName: isFav ? "star.fill" : "star").font(.system(size: 9))
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(isFav ? Color.accentColor : .secondary)
+        .help(isFav ? "Remove from favorites" : "Save as favorite")
+    }
+
+    @ViewBuilder
+    private var artistDetail: some View {
+        if let artist = spotify.openedArtist {
+            ScrollView {
+                VStack(spacing: 10) {
+                    ArtworkThumbnail(url: artist.imageURL, size: 96, cornerRadius: 48, fallback: "person.fill")
+
+                    Text(artist.name)
+                        .font(.system(size: 14, weight: .semibold))
+                        .multilineTextAlignment(.center)
+
+                    if !artist.genres.isEmpty {
+                        HStack(spacing: 6) {
+                            ForEach(artist.genres.prefix(3), id: \.self) { genre in
+                                previewBadge(genre.capitalized)
+                            }
+                        }
+                    }
+
+                    if let followers = artist.followers, followers > 0 {
+                        Text("\(followers) follower\(followers == 1 ? "" : "s")")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Button {
+                        spotify.toggleFavoriteArtist(artist)
+                    } label: {
+                        let isFav = spotify.isFavoriteArtist(artist.id)
+                        Label(isFav ? "Favorited" : "Save as Favorite",
+                              systemImage: isFav ? "star.fill" : "star")
+                            .font(.system(size: 11))
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+
+                    if !spotify.openedArtistAlbums.isEmpty {
+                        Divider().padding(.vertical, 4)
+                        VStack(spacing: 2) {
+                            Text("Albums")
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            ForEach(spotify.openedArtistAlbums) { album in
+                                browseRow(album)
+                            }
+                        }
+                    }
+
+                    Divider().padding(.vertical, 4)
+
+                    if spotify.isLoadingArtist && spotify.openedArtistTopTracks.isEmpty {
+                        ProgressView().controlSize(.small)
+                    } else if !spotify.openedArtistTopTracks.isEmpty {
+                        VStack(spacing: 2) {
+                            Text("Tracks")
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            ForEach(spotify.openedArtistTopTracks.prefix(10)) { track in
+                                TrackRow(track: track, isCurrent: track.uri == spotify.currentTrackURI,
+                                         onPlay: { spotify.playTrack(track, inContext: artist.uri) },
+                                         menu: { trackMenu(track) })
+                            }
+                        }
+                    } else if let err = spotify.openArtistError {
+                        Text(err)
+                            .font(.system(size: 9))
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
+                }
+                .padding(14)
+                .frame(maxWidth: .infinity)
+            }
+        }
     }
 
     @ViewBuilder

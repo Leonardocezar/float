@@ -245,8 +245,8 @@ private struct CompactPanelView: View {
             LayoutToggleButton()
                 .font(.system(size: 8))
                 .foregroundStyle(.tertiary)
-                .padding(.top, 3)
-                .padding(.trailing, 4)
+                .padding(.top, 7)
+                .padding(.trailing, 8)
         }
         .overlay(alignment: .topLeading) {
             HStack(spacing: 4) {
@@ -254,8 +254,8 @@ private struct CompactPanelView: View {
                 MinimizeButton()
             }
             .font(.system(size: 8))
-            .padding(.top, 3)
-            .padding(.leading, 4)
+            .padding(.top, 7)
+            .padding(.leading, 8)
         }
     }
 }

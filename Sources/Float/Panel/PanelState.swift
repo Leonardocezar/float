@@ -13,6 +13,15 @@ final class PanelState: ObservableObject {
 
     var applyLayout: ((_ size: CGSize, _ leftInset: CGFloat) -> Void)?
 
+    var onMinimizedChange: ((Bool) -> Void)?
+
+    @Published var isMinimized: Bool {
+        didSet {
+            UserDefaults.standard.set(isMinimized, forKey: Self.minimizedKey)
+            onMinimizedChange?(isMinimized)
+        }
+    }
+
     @Published var isCompact: Bool {
         didSet {
             UserDefaults.standard.set(isCompact, forKey: Self.compactKey)
@@ -41,8 +50,10 @@ final class PanelState: ObservableObject {
     private static let compactKey = "panel.compact"
     private static let drawerKey = "panel.drawer"
     private static let settingsKey = "panel.settingsDrawer"
+    private static let minimizedKey = "panel.minimized"
 
     init() {
+        isMinimized = UserDefaults.standard.bool(forKey: Self.minimizedKey)
         isCompact = UserDefaults.standard.bool(forKey: Self.compactKey)
         isDrawerOpen = UserDefaults.standard.bool(forKey: Self.drawerKey)
         isSettingsDrawerOpen = UserDefaults.standard.bool(forKey: Self.settingsKey)
@@ -63,6 +74,13 @@ final class PanelState: ObservableObject {
     func toggleCompact() { isCompact.toggle() }
     func toggleDrawer() { isDrawerOpen.toggle() }
     func toggleSettingsDrawer() { isSettingsDrawerOpen.toggle() }
+
+    func minimizeToMenuBar() { isMinimized = true }
+
+    func restoreFromMenuBar() {
+        isCompact = true
+        isMinimized = false
+    }
 
     private func relayout() { applyLayout?(size, leftInset) }
 }

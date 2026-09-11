@@ -1,8 +1,15 @@
 import AppKit
 import SwiftUI
 
+@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var panel: FloatingPanel<AnyView>?
+
+    private var statusItem: NSStatusItem?
+
+    private var popover: NSPopover?
+
+    private var outsideClickMonitor: Any?
 
     private var lastLeftInset: CGFloat = 0
 
@@ -48,13 +55,95 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             frame.origin = NSPoint(x: v.maxX - size.width - 16, y: v.maxY - size.height - 16)
         }
         panel.setFrame(frame, display: true)
-        panel.makeKeyAndOrderFront(nil)
+
+        services.panel.onMinimizedChange = { [weak self] minimized in
+            self?.setMinimized(minimized)
+        }
+        if services.panel.isMinimized {
+            setMinimized(true)
+        } else {
+            panel.makeKeyAndOrderFront(nil)
+        }
 
         services.spotify.start()
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        panel?.makeKeyAndOrderFront(nil)
+        if AppServices.shared.panel.isMinimized {
+            AppServices.shared.panel.restoreFromMenuBar()
+        } else {
+            panel?.makeKeyAndOrderFront(nil)
+        }
         return true
+    }
+
+    private func setMinimized(_ minimized: Bool) {
+        if minimized {
+            panel?.orderOut(nil)
+            showStatusItem()
+        } else {
+            hideStatusItem()
+            panel?.makeKeyAndOrderFront(nil)
+        }
+    }
+
+    private func showStatusItem() {
+        guard statusItem == nil else { return }
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        if let button = item.button {
+            let image = NSImage(systemSymbolName: "timer", accessibilityDescription: "Float")
+            image?.isTemplate = true
+            button.image = image
+            button.target = self
+            button.action = #selector(statusItemClicked)
+        }
+        statusItem = item
+    }
+
+    private func hideStatusItem() {
+        guard let item = statusItem else { return }
+        closePopover(restoring: false)
+        NSStatusBar.system.removeStatusItem(item)
+        statusItem = nil
+    }
+
+    @objc private func statusItemClicked() {
+        if let popover, popover.isShown {
+            closePopover(restoring: true)
+        } else if let button = statusItem?.button {
+            showPopover(relativeTo: button)
+        }
+    }
+
+    private func showPopover(relativeTo button: NSStatusBarButton) {
+        let services = AppServices.shared
+        let view = MenuBarPreviewView()
+            .environmentObject(services)
+            .environmentObject(services.settings)
+            .environmentObject(services.engine)
+            .environmentObject(services.spotify)
+            .environmentObject(services.panel)
+
+        let popover = NSPopover()
+        popover.behavior = .applicationDefined
+        popover.contentViewController = NSHostingController(rootView: view)
+        popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        self.popover = popover
+
+        outsideClickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
+            Task { @MainActor in self?.closePopover(restoring: false) }
+        }
+    }
+
+    private func closePopover(restoring: Bool) {
+        if let monitor = outsideClickMonitor {
+            NSEvent.removeMonitor(monitor)
+            outsideClickMonitor = nil
+        }
+        popover?.performClose(nil)
+        popover = nil
+        if restoring {
+            AppServices.shared.panel.restoreFromMenuBar()
+        }
     }
 }

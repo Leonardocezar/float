@@ -70,6 +70,25 @@ struct PanelView: View {
     }
 }
 
+struct MenuBarPreviewView: View {
+    var body: some View {
+        HStack(spacing: 0) {
+            CompactPomodoroView()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(.horizontal, 6)
+
+            Divider().padding(.vertical, 8)
+
+            CompactSpotifyView()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(.horizontal, 6)
+        }
+        .padding(.vertical, 8)
+        .frame(width: PanelState.compactSize.width, height: PanelState.compactSize.height)
+        .background(.ultraThinMaterial)
+    }
+}
+
 struct SettingsDrawerButton: View {
     @EnvironmentObject private var panelState: PanelState
 
@@ -82,6 +101,21 @@ struct SettingsDrawerButton: View {
         .buttonStyle(.plain)
         .foregroundStyle(panelState.isSettingsDrawerOpen ? Color.accentColor : .secondary)
         .help("Settings")
+    }
+}
+
+struct MinimizeButton: View {
+    @EnvironmentObject private var panelState: PanelState
+
+    var body: some View {
+        Button {
+            panelState.minimizeToMenuBar()
+        } label: {
+            Image(systemName: "minus.circle.fill")
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.tertiary)
+        .help("Minimize to menu bar")
     }
 }
 
@@ -173,6 +207,7 @@ private struct ExpandedPanelView: View {
         VStack(spacing: 0) {
             HStack(spacing: 10) {
                 QuitButton()
+                MinimizeButton()
                 Text("Float")
                     .font(.system(size: 13, weight: .semibold, design: .rounded))
                     .foregroundStyle(.secondary)
@@ -231,10 +266,13 @@ private struct CompactPanelView: View {
             .padding(.trailing, 4)
         }
         .overlay(alignment: .topLeading) {
-            QuitButton()
-                .font(.system(size: 8))
-                .padding(.top, 3)
-                .padding(.leading, 4)
+            HStack(spacing: 4) {
+                QuitButton()
+                MinimizeButton()
+            }
+            .font(.system(size: 8))
+            .padding(.top, 3)
+            .padding(.leading, 4)
         }
     }
 }

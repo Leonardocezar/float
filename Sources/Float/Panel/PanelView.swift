@@ -89,21 +89,6 @@ struct MenuBarPreviewView: View {
     }
 }
 
-struct SettingsDrawerButton: View {
-    @EnvironmentObject private var panelState: PanelState
-
-    var body: some View {
-        Button {
-            panelState.toggleSettingsDrawer()
-        } label: {
-            Image(systemName: panelState.isSettingsDrawerOpen ? "gearshape.fill" : "gearshape")
-        }
-        .buttonStyle(.plain)
-        .foregroundStyle(panelState.isSettingsDrawerOpen ? Color.accentColor : .secondary)
-        .help("Settings")
-    }
-}
-
 struct MinimizeButton: View {
     @EnvironmentObject private var panelState: PanelState
 
@@ -215,7 +200,6 @@ private struct ExpandedPanelView: View {
                     .foregroundStyle(.secondary)
                 Spacer()
                 LayoutToggleButton()
-                SettingsDrawerButton()
             }
             .padding(.horizontal, 14)
             .padding(.top, 10)
@@ -258,14 +242,11 @@ private struct CompactPanelView: View {
                 .padding(.horizontal, 6)
         }
         .overlay(alignment: .topTrailing) {
-            HStack(spacing: 6) {
-                CompactSettingsButton()
-                LayoutToggleButton()
-            }
-            .font(.system(size: 8))
-            .foregroundStyle(.tertiary)
-            .padding(.top, 3)
-            .padding(.trailing, 4)
+            LayoutToggleButton()
+                .font(.system(size: 8))
+                .foregroundStyle(.tertiary)
+                .padding(.top, 3)
+                .padding(.trailing, 4)
         }
         .overlay(alignment: .topLeading) {
             HStack(spacing: 4) {
@@ -276,19 +257,6 @@ private struct CompactPanelView: View {
             .padding(.top, 3)
             .padding(.leading, 4)
         }
-    }
-}
-
-private struct CompactSettingsButton: View {
-    @EnvironmentObject private var panelState: PanelState
-    var body: some View {
-        Button {
-            panelState.isCompact = false
-            panelState.isSettingsDrawerOpen = true
-        } label: {
-            Image(systemName: "gearshape")
-        }
-        .buttonStyle(.plain)
     }
 }
 

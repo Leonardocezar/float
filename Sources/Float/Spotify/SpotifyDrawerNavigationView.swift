@@ -429,6 +429,7 @@ struct SpotifyDrawerNavigationView: View {
                     }
                     Spacer(minLength: 0)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -437,9 +438,9 @@ struct SpotifyDrawerNavigationView: View {
                 Image(systemName: "play.fill").font(.system(size: 9))
             }
             .buttonStyle(.plain).foregroundStyle(.secondary)
-            if browsable {
-                Image(systemName: "chevron.right").font(.system(size: 8)).foregroundStyle(.tertiary)
-            }
+
+            Image(systemName: "chevron.right").font(.system(size: 8)).foregroundStyle(.tertiary)
+                .opacity(browsable ? 1 : 0)
         }
         .padding(.vertical, 2)
         .listRowInsets(EdgeInsets(top: 3, leading: 8, bottom: 3, trailing: 8))

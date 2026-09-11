@@ -1,6 +1,6 @@
 import Foundation
 
-struct SpotifyPlaylist: Identifiable, Equatable, Hashable {
+struct SpotifyPlaylist: Identifiable, Equatable, Hashable, Codable {
     var id: String
     var name: String
     var uri: String
@@ -341,8 +341,9 @@ final class SpotifyWebClient {
 
         if code == 429 {
             let retry = Double(http?.value(forHTTPHeaderField: "Retry-After") ?? "") ?? 10
-            backoffUntil = Date().addingTimeInterval(min(retry, 60) + 1)
-            throw WebError.rateLimited(retry)
+            let wait = min(max(retry, 1), 120) + 1
+            backoffUntil = Date().addingTimeInterval(wait)
+            throw WebError.rateLimited(wait)
         }
         guard (200..<300).contains(code) else {
             let snippet = String(data: data, encoding: .utf8)?.prefix(140) ?? ""

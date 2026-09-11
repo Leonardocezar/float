@@ -5,7 +5,12 @@ import Combine
 final class SpotifyModel: ObservableObject {
     @Published private(set) var nowPlaying: NowPlaying?
     @Published private(set) var playlists: [SpotifyPlaylist] = []
+    @Published private(set) var playlistsFromCache = false
+    @Published private(set) var playlistsUpdatedAt: Date?
+    @Published private(set) var searchIsOffline = false
     @Published var lastError: String?
+
+    var isRateLimited: Bool { web.isRateLimited }
 
     @Published private(set) var contextName: String = ""
     @Published private(set) var contextTracks: [SpotifyTrack] = []
@@ -91,7 +96,10 @@ final class SpotifyModel: ObservableObject {
 
     func start() {
         engine.startIfNeeded()
-        if auth.isAuthorized { sync.startPeriodic() }
+        if auth.isAuthorized {
+            sync.startPeriodic()
+            Task { await loadPlaylists() }
+        }
         ticker?.invalidate()
 
         let t = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
@@ -148,25 +156,50 @@ final class SpotifyModel: ObservableObject {
 
     func search(_ query: String) {
         let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !q.isEmpty else { searchResults = SpotifySearchResults(); lastSearchQuery = ""; return }
+        guard !q.isEmpty else {
+            searchResults = SpotifySearchResults(); lastSearchQuery = ""; searchIsOffline = false; return
+        }
         guard q.lowercased() != lastSearchQuery else { return }
-        if web.isRateLimited {
-            lastError = "Spotify rate limit — wait a few seconds and try again."
+        lastSearchQuery = q.lowercased()
+
+        if web.isRateLimited || !auth.isAuthorized {
+            Task { await self.offlineSearch(q) }
             return
         }
-        lastSearchQuery = q.lowercased()
+
         isSearching = true
         Task {
-            do { self.searchResults = try await web.search(q) }
-            catch {
-                self.lastError = error.localizedDescription
+            do {
+                self.searchResults = try await web.search(q)
+                self.searchIsOffline = false
+            } catch {
+                await self.offlineSearch(q)
+                if self.searchResults.isEmpty { self.lastError = error.localizedDescription }
                 self.lastSearchQuery = ""
             }
             self.isSearching = false
         }
     }
 
-    func clearSearch() { searchResults = SpotifySearchResults(); lastSearchQuery = "" }
+    /// Search over everything already in the local cache — works with no network.
+    private func offlineSearch(_ q: String) async {
+        let hits = await store.localSearch(q)
+        let pls = await store.localPlaylists(matching: q)
+        var r = SpotifySearchResults()
+        r.tracks = hits.map(\.track)
+        r.playlists = pls.map {
+            SpotifyBrowseItem(id: $0.id, name: $0.name,
+                              subtitle: isOwned($0) ? "Playlist" : "Followed",
+                              uri: $0.uri, kind: .playlist,
+                              ownerID: $0.ownerID, collaborative: $0.collaborative)
+        }
+        searchResults = r
+        searchIsOffline = true
+    }
+
+    func clearSearch() {
+        searchResults = SpotifySearchResults(); lastSearchQuery = ""; searchIsOffline = false
+    }
 
     func canBrowse(_ item: SpotifyBrowseItem) -> Bool {
         if item.kind == .album { return true }
@@ -446,6 +479,9 @@ final class SpotifyModel: ObservableObject {
     func disconnect() {
         auth.signOut()
         playlists = []
+        playlistsFromCache = false
+        playlistsUpdatedAt = nil
+        searchResults = SpotifySearchResults()
         sync.stop()
         Task { await store.clear() }
     }
@@ -453,12 +489,31 @@ final class SpotifyModel: ObservableObject {
     private var playlistsLoadedAt: Date = .distantPast
 
     func loadPlaylists(force: Bool = false) async {
+        // Always show the cached list first so the UI is never empty.
+        if playlists.isEmpty {
+            let cached = await store.playlists
+            if !cached.isEmpty {
+                playlists = cached
+                playlistsFromCache = true
+                playlistsUpdatedAt = await store.playlistsUpdatedAt
+            }
+        }
+
         guard auth.isAuthorized, !web.isRateLimited else { return }
-        if !force, !playlists.isEmpty, Date().timeIntervalSince(playlistsLoadedAt) < 60 { return }
+        if !force, !playlistsFromCache, !playlists.isEmpty,
+           Date().timeIntervalSince(playlistsLoadedAt) < 60 { return }
+
         do {
-            playlists = try await web.currentUserPlaylists()
+            let fresh = try await web.currentUserPlaylists()
+            playlists = fresh
+            playlistsFromCache = false
             playlistsLoadedAt = .now
-        } catch { lastError = error.localizedDescription }
+            playlistsUpdatedAt = .now
+            await store.putPlaylists(fresh)
+        } catch {
+            // Keep whatever cache we already showed.
+            if playlists.isEmpty { lastError = error.localizedDescription }
+        }
     }
 
     func likeCurrent() async {

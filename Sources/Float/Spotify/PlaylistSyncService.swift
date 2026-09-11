@@ -64,9 +64,9 @@ final class PlaylistSyncService: ObservableObject {
             return
         }
 
+        await store.putPlaylists(all)
         let mine = all.filter { ($0.ownerID != nil && $0.ownerID == myID) || $0.collaborative }
         status = "\(all.count) playlists, \(mine.count) mine"
-        await store.keepOnly(ids: Set(mine.map(\.id)))
 
         for (i, pl) in mine.prefix(maxPlaylistsPerRun).enumerated() {
             if web.isRateLimited { status = "rate limited (\(i)/\(mine.count))"; break }

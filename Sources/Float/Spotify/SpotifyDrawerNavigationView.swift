@@ -176,6 +176,15 @@ struct SpotifyDrawerNavigationView: View {
         .padding(.horizontal, 8).padding(.vertical, 6)
     }
 
+    private func cacheAge(_ date: Date?) -> String {
+        guard let date else { return "offline · cached" }
+        let s = Int(Date().timeIntervalSince(date))
+        if s < 90 { return "offline · just synced" }
+        if s < 3600 { return "offline · \(s / 60)m ago" }
+        if s < 86400 { return "offline · \(s / 3600)h ago" }
+        return "offline · \(s / 86400)d ago"
+    }
+
     private func countLabel(loaded: Int, total: Int, complete: Bool) -> String {
         if complete { return "\(loaded) tracks" }
         return total > 0 ? "\(loaded) / \(total) tracks" : "\(loaded) tracks • syncing"
@@ -217,10 +226,21 @@ struct SpotifyDrawerNavigationView: View {
             .padding(.horizontal, 8).padding(.vertical, 7)
             Divider()
 
+            if spotify.searchIsOffline && !spotify.searchResults.isEmpty {
+                Label("From your library — Spotify search is offline", systemImage: "wifi.slash")
+                    .font(.system(size: 9))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 10).padding(.vertical, 4)
+                    .background(.white.opacity(0.04))
+            }
+
             if spotify.isSearching {
                 loading
             } else if spotify.searchResults.isEmpty {
-                empty("magnifyingglass", searchText.isEmpty ? "Search Spotify" : "No results")
+                empty("magnifyingglass",
+                      searchText.isEmpty ? "Search Spotify"
+                        : (spotify.isRateLimited ? "Nothing in your library matches" : "No results"))
             } else {
                 List {
                     if !spotify.searchResults.tracks.isEmpty {
@@ -259,10 +279,17 @@ struct SpotifyDrawerNavigationView: View {
                 if spotify.sync.runningFullSync || !spotify.sync.syncing.isEmpty {
                     ProgressView().controlSize(.mini)
                 }
-                Text(spotify.sync.status)
-                    .font(.system(size: 8, design: .monospaced))
-                    .foregroundStyle(.tertiary)
-                    .lineLimit(1)
+                if spotify.playlistsFromCache {
+                    Label(cacheAge(spotify.playlistsUpdatedAt), systemImage: "wifi.slash")
+                        .font(.system(size: 8))
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                } else {
+                    Text(spotify.sync.status)
+                        .font(.system(size: 8, design: .monospaced))
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                }
                 Spacer()
                 Button { Task { await spotify.sync.runFullSync() } } label: {
                     Image(systemName: "arrow.clockwise").font(.system(size: 8))

@@ -6,6 +6,7 @@ struct SpotifyPlaylist: Identifiable, Equatable, Hashable, Codable {
     var uri: String
     var ownerID: String? = nil
     var collaborative: Bool = false
+    var imageURL: URL? = nil
 }
 
 struct SpotifyDevice: Identifiable, Equatable {
@@ -20,6 +21,7 @@ struct SpotifyTrack: Identifiable, Equatable, Codable {
     var name: String
     var artist: String
     var durationMs: Double
+    var artworkURL: URL? = nil
 }
 
 struct SpotifyContextTracks: Equatable {
@@ -37,6 +39,7 @@ struct SpotifyBrowseItem: Identifiable, Equatable, Hashable {
 
     var ownerID: String?
     var collaborative: Bool = false
+    var imageURL: URL? = nil
 }
 
 struct SpotifySearchResults: Equatable {
@@ -104,7 +107,8 @@ final class SpotifyWebClient {
             return SpotifyPlaylist(
                 id: id, name: name, uri: uri,
                 ownerID: (item["owner"] as? [String: Any])?["id"] as? String,
-                collaborative: item["collaborative"] as? Bool ?? false
+                collaborative: item["collaborative"] as? Bool ?? false,
+                imageURL: Self.thumbnail(item["images"] as? [[String: Any]])
             )
         }
     }
@@ -147,8 +151,19 @@ final class SpotifyWebClient {
         return SpotifyBrowseItem(
             id: id, name: name, subtitle: subtitle, uri: uri, kind: kind,
             ownerID: owner?["id"] as? String,
-            collaborative: obj["collaborative"] as? Bool ?? false
+            collaborative: obj["collaborative"] as? Bool ?? false,
+            imageURL: Self.thumbnail(obj["images"] as? [[String: Any]])
         )
+    }
+
+    /// Picks the smallest image Spotify offers — plenty for a drawer row.
+    private static func thumbnail(_ images: [[String: Any]]?) -> URL? {
+        guard let images, !images.isEmpty else { return nil }
+        let smallestFirst = images.sorted {
+            (($0["width"] as? Int) ?? .max) < (($1["width"] as? Int) ?? .max)
+        }
+        guard let urlString = smallestFirst.first?["url"] as? String else { return nil }
+        return URL(string: urlString)
     }
 
     private var cachedUserID: String?
@@ -290,8 +305,15 @@ final class SpotifyWebClient {
     private func albumTracks(id: String) async throws -> SpotifyContextTracks {
         let json = try await get("albums/\(id)")
         let name = json["name"] as? String ?? "Album"
+        let albumArt = Self.thumbnail(json["images"] as? [[String: Any]])
         let items = (json["tracks"] as? [String: Any])?["items"] as? [[String: Any]] ?? []
-        return SpotifyContextTracks(name: name, tracks: items.compactMap { Self.track(from: $0) })
+        let tracks = items.compactMap { item -> SpotifyTrack? in
+            guard var track = Self.track(from: item) else { return nil }
+            // Album track items don't nest their own `album` object.
+            if track.artworkURL == nil { track.artworkURL = albumArt }
+            return track
+        }
+        return SpotifyContextTracks(name: name, tracks: tracks)
     }
 
     private static func track(from obj: [String: Any]?) -> SpotifyTrack? {
@@ -301,8 +323,10 @@ final class SpotifyWebClient {
               let name = obj["name"] as? String else { return nil }
         let artist = (obj["artists"] as? [[String: Any]])?
             .compactMap { $0["name"] as? String }.joined(separator: ", ") ?? ""
+        let album = obj["album"] as? [String: Any]
         return SpotifyTrack(id: id, uri: uri, name: name, artist: artist,
-                            durationMs: obj["duration_ms"] as? Double ?? 0)
+                            durationMs: obj["duration_ms"] as? Double ?? 0,
+                            artworkURL: Self.thumbnail(album?["images"] as? [[String: Any]]))
     }
 
     func pause() async throws { _ = try await send("PUT", "me/player/pause", json: nil) }

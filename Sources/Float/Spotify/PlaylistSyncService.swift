@@ -81,7 +81,8 @@ final class PlaylistSyncService: ObservableObject {
 
         if !force,
            let cached = await store.entry(for: id),
-           cached.total == header.total, cached.complete {
+           cached.total == header.total, cached.complete,
+           cached.tracks.allSatisfy({ $0.artworkURL != nil }) {
             return false
         }
 

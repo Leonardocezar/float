@@ -190,7 +190,8 @@ final class SpotifyModel: ObservableObject {
             SpotifyBrowseItem(id: $0.id, name: $0.name,
                               subtitle: isOwned($0) ? "Playlist" : "Followed",
                               uri: $0.uri, kind: .playlist,
-                              ownerID: $0.ownerID, collaborative: $0.collaborative)
+                              ownerID: $0.ownerID, collaborative: $0.collaborative,
+                              imageURL: $0.imageURL)
         }
         searchResults = r
         searchIsOffline = true

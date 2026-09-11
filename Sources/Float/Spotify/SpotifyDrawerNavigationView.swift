@@ -354,7 +354,8 @@ struct SpotifyDrawerNavigationView: View {
                                                 subtitle: pl.collaborative ? "Collaborative"
                                                     : (spotify.isOwned(pl) ? "Playlist" : "Followed"),
                                                 uri: pl.uri, kind: .playlist,
-                                                ownerID: pl.ownerID, collaborative: pl.collaborative))
+                                                ownerID: pl.ownerID, collaborative: pl.collaborative,
+                                                imageURL: pl.imageURL))
                 }
             }
             .listStyle(.plain)
@@ -420,8 +421,8 @@ struct SpotifyDrawerNavigationView: View {
                 if browsable { spotify.openList(item) } else { spotify.playList(uri: item.uri) }
             } label: {
                 HStack(spacing: 8) {
-                    Image(systemName: item.kind == .album ? "square.stack" : "music.note.list")
-                        .font(.system(size: 10)).foregroundStyle(.secondary).frame(width: 14)
+                    ArtworkThumbnail(url: item.imageURL, size: 30, cornerRadius: 5,
+                                     fallback: item.kind == .album ? "square.stack" : "music.note.list")
                     VStack(alignment: .leading, spacing: 1) {
                         Text(item.name).font(.system(size: 11, weight: .medium)).lineLimit(1)
                         Text(item.subtitle).font(.system(size: 9)).foregroundStyle(.secondary).lineLimit(1)
@@ -512,10 +513,17 @@ private struct TrackRow<Menu: View>: View {
         HStack(spacing: 8) {
             Button(action: onPlay) {
                 HStack(spacing: 8) {
-                    Image(systemName: isCurrent ? "speaker.wave.2.fill" : "music.note")
-                        .font(.system(size: 9))
-                        .foregroundStyle(isCurrent ? Color.accentColor : .secondary)
-                        .frame(width: 13)
+                    ZStack(alignment: .bottomTrailing) {
+                        ArtworkThumbnail(url: track.artworkURL, size: 28, cornerRadius: 4)
+                        if isCurrent {
+                            Image(systemName: "speaker.wave.2.fill")
+                                .font(.system(size: 6, weight: .bold))
+                                .foregroundStyle(.white)
+                                .padding(2.5)
+                                .background(Circle().fill(Color.accentColor))
+                                .offset(x: 3, y: 3)
+                        }
+                    }
                     VStack(alignment: .leading, spacing: 1) {
                         Text(track.name)
                             .font(.system(size: 11, weight: isCurrent ? .semibold : .regular))
@@ -546,5 +554,39 @@ private struct TrackRow<Menu: View>: View {
             .fill(isCurrent ? Color.accentColor.opacity(0.14) : .clear))
         .listRowInsets(EdgeInsets(top: 2, leading: 8, bottom: 2, trailing: 6))
         .listRowSeparator(.hidden)
+    }
+}
+
+/// Cover art thumbnail with a placeholder for tracks/playlists/albums that
+/// have none loaded (yet).
+private struct ArtworkThumbnail: View {
+    let url: URL?
+    var size: CGFloat = 28
+    var cornerRadius: CGFloat = 4
+    var fallback: String = "music.note"
+
+    var body: some View {
+        Group {
+            if let url {
+                AsyncImage(url: url) { phase in
+                    if let image = phase.image {
+                        image.resizable().aspectRatio(contentMode: .fill)
+                    } else {
+                        placeholder
+                    }
+                }
+            } else {
+                placeholder
+            }
+        }
+        .frame(width: size, height: size)
+        .background(.quaternary.opacity(0.5))
+        .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
+    }
+
+    private var placeholder: some View {
+        Image(systemName: fallback)
+            .font(.system(size: size * 0.4))
+            .foregroundStyle(.secondary)
     }
 }

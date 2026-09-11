@@ -97,7 +97,6 @@ final class SpotifyModel: ObservableObject {
     func start() {
         engine.startIfNeeded()
         if auth.isAuthorized {
-            sync.startPeriodic()
             Task { await loadPlaylists() }
         }
         ticker?.invalidate()
@@ -470,7 +469,7 @@ final class SpotifyModel: ObservableObject {
             engine.startIfNeeded()
             self.myUserID = try? await web.currentUserID()
             await loadPlaylists(force: true)
-            sync.startPeriodic()
+            await sync.runFullSync()
         } catch {
             lastError = error.localizedDescription
         }
@@ -482,7 +481,6 @@ final class SpotifyModel: ObservableObject {
         playlistsFromCache = false
         playlistsUpdatedAt = nil
         searchResults = SpotifySearchResults()
-        sync.stop()
         Task { await store.clear() }
     }
 

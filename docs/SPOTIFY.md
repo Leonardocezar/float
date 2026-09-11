@@ -112,28 +112,34 @@ Endpoints in use:
   we pass it explicitly anyway.
 - Search `limit` is capped at 10 by the schema (was 20 → 400).
 
-## Local cache + sync job
+## Local cache + manual sync
 
 `PlaylistStore` (`actor`) → `~/Library/Application Support/Float/playlist-cache.json`,
-`{ [playlistID]: Entry }` where `Entry = { name, snapshotID, tracks[], total,
-complete, updatedAt }`.
+`{ entries: { [playlistID]: Entry }, playlists: [SpotifyPlaylist], playlistsUpdatedAt }`
+where `Entry = { name, tracks[], total, complete, updatedAt }`. `total` is the
+playlist's track count as of the last check — that count, not `snapshot_id`, is
+what decides whether a playlist needs re-fetching.
 
-`PlaylistSyncService` (`@MainActor`):
+`PlaylistSyncService` (`@MainActor`) has **no background timer** — it only runs
+when asked to: the Library tab's ↻ button, right after `connect()`, or opening
+a single playlist/track (which syncs just that one).
 
-- `startPeriodic()` — first run 6 s after launch, then every 20 min.
-- `runFullSync()` — `GET /me` + `allUserPlaylists`, filter to owned/collaborative,
-  `store.keepOnly` the current set, then for each (max 100): `syncPlaylist`.
+- `runFullSync()` — `GET /me` + `allUserPlaylists`, caches the list
+  (`store.putPlaylists`), filters to owned/collaborative, then calls
+  `syncPlaylist` on each (max 100, 280 ms gap) and reports how many changed.
 - `syncPlaylist(id, force:)`:
-  - skip if a complete entry was updated < 5 min ago (unless `force`)
-  - `playlistHeader` → skip if `snapshot_id` unchanged and entry complete
+  - `playlistHeader` — one cheap request for `{name, total}` (a second request
+    only if the API didn't inline `tracks.total`)
+  - if `total` matches the cached entry and it's complete, **skip** — no paging
   - otherwise page through `/items` (50 at a time, 280 ms gap), calling
     `store.put` after **each page** so the UI grows live
-  - stop on `isRateLimited`
-- `store.put` fires `onChange(id)` → `SpotifyModel.storeEntryChanged` updates
-  `openedListTracks` / `contextTracks` and the "Syncing… X of Y" footer.
+  - stops early on `isRateLimited`; returns whether it actually re-synced
+- `store.put`/`putPlaylists` fire `onChange(id)` → `SpotifyModel.storeEntryChanged`
+  updates `openedListTracks` / `contextTracks` and the "Syncing… X of Y" footer.
 
-The drawer reads `store.entry(for:)` first — a cached playlist opens with **zero**
-API calls. `disconnect()` clears the store.
+The drawer reads the cache first — a cached playlist opens, and the Library list
+renders, with **zero** API calls; `loadPlaylists`/`search` fall back to the cache
+when the API is unreachable or rate-limited. `disconnect()` clears the store.
 
 ## `SpotifyModel` responsibilities
 

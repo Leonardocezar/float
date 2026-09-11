@@ -3,8 +3,9 @@ import Foundation
 actor PlaylistStore {
     struct Entry: Codable, Equatable {
         var name: String
-        var snapshotID: String
         var tracks: [SpotifyTrack]
+        /// The playlist's track count as of the last check — the signal used
+        /// to decide whether it needs re-syncing.
         var total: Int
         var complete: Bool
         var updatedAt: Date
@@ -37,14 +38,12 @@ actor PlaylistStore {
     // MARK: - Track listings
 
     func entry(for id: String) -> Entry? { disk.entries[id] }
-    func snapshot(for id: String) -> String? { disk.entries[id]?.snapshotID }
     var ids: [String] { Array(disk.entries.keys) }
     var newestUpdate: Date? { disk.entries.values.map(\.updatedAt).max() }
 
-    func put(id: String, name: String, snapshotID: String,
-             tracks: [SpotifyTrack], total: Int, complete: Bool) {
-        disk.entries[id] = Entry(name: name, snapshotID: snapshotID, tracks: tracks,
-                                 total: total, complete: complete, updatedAt: .now)
+    func put(id: String, name: String, tracks: [SpotifyTrack], total: Int, complete: Bool) {
+        disk.entries[id] = Entry(name: name, tracks: tracks, total: total,
+                                 complete: complete, updatedAt: .now)
         scheduleSave()
         onChange?(id)
     }

@@ -104,8 +104,8 @@ See `docs/SPOTIFY.md` for the full picture. Files:
 | `NowPlaying` | value type; `interpolatedPosition(now:)` smooths the progress bar |
 | `Keychain` | generic-password wrapper (service `com.leonardocezar.Float`) |
 | `SpotifyWebClient` | Web API wrapper + 429 backoff; parses JSON to typed models |
-| `PlaylistStore` | `actor`; on-disk JSON cache of playlist track listings |
-| `PlaylistSyncService` | `@MainActor` background job that fills/refreshes the store |
+| `PlaylistStore` | `actor`; on-disk JSON cache of the playlist list + track listings |
+| `PlaylistSyncService` | `@MainActor`; fills/refreshes the store, manually triggered only (no timer) |
 | `SpotifyModel` | `@MainActor ObservableObject`; the facade the UI binds to |
 | `NowPlayingView` | the now-playing bar |
 | `SpotifyDrawerNavigationView` | the right drawer (Playing / Search / Library, playlist detail) |

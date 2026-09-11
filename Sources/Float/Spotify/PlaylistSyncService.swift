@@ -1,21 +1,23 @@
 import Foundation
 import Combine
 
+/// Keeps `PlaylistStore` populated with the track listing of every playlist
+/// the user owns / collaborates on. Runs only when asked to (the Library
+/// tab's refresh button, or opening a single playlist) — there is no
+/// background timer. Each playlist is cheaply checked by its track count
+/// first; only playlists whose count changed are paged through again.
 @MainActor
 final class PlaylistSyncService: ObservableObject {
     @Published private(set) var lastFullSyncAt: Date?
     @Published private(set) var syncing: Set<String> = []
     @Published private(set) var runningFullSync = false
-
     @Published private(set) var status: String = "idle"
 
     private let web: SpotifyWebClient
     private let store: PlaylistStore
     private let auth: SpotifyAuth
-    private var timer: Timer?
 
     private let requestGap: Duration = .milliseconds(280)
-    private let fullSyncInterval: TimeInterval = 20 * 60
     private let maxPlaylistsPerRun = 100
     private let maxTracksPerPlaylist = 1_000
 
@@ -27,25 +29,8 @@ final class PlaylistSyncService: ObservableObject {
 
     func isSyncing(_ id: String) -> Bool { syncing.contains(id) }
 
-    func startPeriodic() {
-        timer?.invalidate()
-        let t = Timer(timeInterval: fullSyncInterval, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated {
-                guard let self else { return }
-                Task { await self.runFullSync() }
-            }
-        }
-        RunLoop.main.add(t, forMode: .common)
-        timer = t
-
-        Task {
-            try? await Task.sleep(for: .seconds(6))
-            await runFullSync()
-        }
-    }
-
-    func stop() { timer?.invalidate(); timer = nil }
-
+    /// Check every owned/collaborative playlist's track count and re-fetch
+    /// only the ones that changed. User-triggered only.
     func runFullSync() async {
         guard auth.isAuthorized else { status = "not connected"; return }
         guard !web.isRateLimited else { status = "rate limited"; return }
@@ -66,37 +51,38 @@ final class PlaylistSyncService: ObservableObject {
 
         await store.putPlaylists(all)
         let mine = all.filter { ($0.ownerID != nil && $0.ownerID == myID) || $0.collaborative }
-        status = "\(all.count) playlists, \(mine.count) mine"
 
+        var changed = 0
         for (i, pl) in mine.prefix(maxPlaylistsPerRun).enumerated() {
-            if web.isRateLimited { status = "rate limited (\(i)/\(mine.count))"; break }
-            status = "syncing \(i + 1)/\(mine.count): \(pl.name)"
-            await syncPlaylist(id: pl.id, force: false)
+            if web.isRateLimited { status = "rate limited (\(i)/\(mine.count) checked)"; break }
+            status = "checking \(i + 1)/\(mine.count): \(pl.name)"
+            if await syncPlaylist(id: pl.id, force: false) { changed += 1 }
             try? await Task.sleep(for: requestGap)
         }
         lastFullSyncAt = .now
-        status = "synced \(mine.count) playlists"
+        status = changed == 0
+            ? "checked \(mine.count) playlists — all up to date"
+            : "checked \(mine.count) playlists — \(changed) updated"
     }
 
-    func syncPlaylist(id: String, force: Bool = false) async {
-        guard auth.isAuthorized, !web.isRateLimited, !syncing.contains(id) else { return }
-
-        if !force, let cached = await store.entry(for: id), cached.complete,
-           Date().timeIntervalSince(cached.updatedAt) < 5 * 60 {
-            return
-        }
+    /// Re-fetch one playlist's tracks page by page, but only if its track
+    /// count changed since the last check (or `force`). Returns whether it
+    /// actually re-synced.
+    @discardableResult
+    func syncPlaylist(id: String, force: Bool = false) async -> Bool {
+        guard auth.isAuthorized, !web.isRateLimited, !syncing.contains(id) else { return false }
 
         let header: SpotifyWebClient.PlaylistHeader
         do { header = try await web.playlistHeader(id: id) }
         catch {
-            status = "header failed: \(error.localizedDescription)"
-            return
+            status = "check failed: \(error.localizedDescription)"
+            return false
         }
 
         if !force,
            let cached = await store.entry(for: id),
-           cached.snapshotID == header.snapshotID, cached.complete {
-            return
+           cached.total == header.total, cached.complete {
+            return false
         }
 
         syncing.insert(id)
@@ -104,7 +90,6 @@ final class PlaylistSyncService: ObservableObject {
 
         let pageSize = 50
         var acc: [SpotifyTrack] = []
-        var total = 0
         var offset = 0
         while acc.count < maxTracksPerPlaylist {
             if web.isRateLimited { break }
@@ -113,13 +98,13 @@ final class PlaylistSyncService: ObservableObject {
             catch { status = "page failed: \(error.localizedDescription)"; break }
 
             acc += page.tracks
-            if page.total > 0 { total = page.total }
+            let total = page.total > 0 ? page.total : header.total
             let complete = !page.hasMore
-            await store.put(id: id, name: header.name, snapshotID: header.snapshotID,
-                            tracks: acc, total: total, complete: complete)
+            await store.put(id: id, name: header.name, tracks: acc, total: total, complete: complete)
             if complete || page.tracks.isEmpty { break }
             offset += pageSize
             try? await Task.sleep(for: requestGap)
         }
+        return true
     }
 }

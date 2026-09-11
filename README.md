@@ -14,8 +14,9 @@ focus stats) and Spotify control.
 - **Spotify** — Float registers itself as a Spotify Connect device via the Web
   Playback SDK in a hidden `WKWebView`, so no other Spotify app needs to be
   open (**Premium required**). A right-side drawer searches Spotify and browses
-  your playlists; playlist track listings are cached locally and refreshed by a
-  background job.
+  your playlists; playlist track listings are cached locally (works offline /
+  rate-limited) and refreshed on demand — only playlists whose track count
+  changed are re-fetched.
 - **Music sync** — optionally resume your music when a focus interval starts and
   pause (or keep playing) on breaks.
 

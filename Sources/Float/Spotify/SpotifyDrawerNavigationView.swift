@@ -295,6 +295,8 @@ struct SpotifyDrawerNavigationView: View {
                     Image(systemName: "arrow.clockwise").font(.system(size: 8))
                 }
                 .buttonStyle(.plain).foregroundStyle(.tertiary)
+                .help("Sync playlists now")
+                .disabled(spotify.sync.runningFullSync)
             }
             .padding(.horizontal, 8).padding(.vertical, 4)
             .background(.white.opacity(0.03))

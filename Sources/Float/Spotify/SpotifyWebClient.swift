@@ -255,14 +255,19 @@ final class SpotifyWebClient {
         }
     }
 
-    struct PlaylistHeader { var name: String; var snapshotID: String }
+    struct PlaylistHeader { var name: String; var total: Int }
 
+    /// Cheap check: the playlist's name and current track count, without
+    /// paging through its tracks. One request when the API returns
+    /// `tracks.total` inline, two otherwise.
     func playlistHeader(id: String) async throws -> PlaylistHeader {
-        let json: [String: Any]
-        do { json = try await get("playlists/\(id)?fields=name,snapshot_id") }
-        catch { json = try await get("playlists/\(id)") }
-        return PlaylistHeader(name: json["name"] as? String ?? "Playlist",
-                              snapshotID: json["snapshot_id"] as? String ?? "")
+        let json = try await get("playlists/\(id)?fields=name,tracks.total")
+        let name = json["name"] as? String ?? "Playlist"
+        if let total = (json["tracks"] as? [String: Any])?["total"] as? Int {
+            return PlaylistHeader(name: name, total: total)
+        }
+        let countJson = try await get("playlists/\(id)/items?limit=1&fields=total")
+        return PlaylistHeader(name: name, total: countJson["total"] as? Int ?? 0)
     }
 
     struct PlaylistPage { var tracks: [SpotifyTrack]; var total: Int; var hasMore: Bool }

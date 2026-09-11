@@ -1,13 +1,25 @@
 import Foundation
 import SwiftData
 
+enum TaskStatus: String, CaseIterable, Identifiable, Codable {
+    case todo, inProgress, done
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .todo: return "To Do"
+        case .inProgress: return "In Progress"
+        case .done: return "Done"
+        }
+    }
+}
+
 @Model
 final class TaskItem {
     var id: UUID
     var title: String
     var estimatedPomodoros: Int
     var completedPomodoros: Int
-    var isDone: Bool
+    var statusRaw: String = TaskStatus.todo.rawValue
     var createdAt: Date
     var order: Int
 
@@ -16,7 +28,7 @@ final class TaskItem {
         title: String,
         estimatedPomodoros: Int = 1,
         completedPomodoros: Int = 0,
-        isDone: Bool = false,
+        status: TaskStatus = .todo,
         createdAt: Date = .now,
         order: Int = 0
     ) {
@@ -24,9 +36,14 @@ final class TaskItem {
         self.title = title
         self.estimatedPomodoros = estimatedPomodoros
         self.completedPomodoros = completedPomodoros
-        self.isDone = isDone
+        self.statusRaw = status.rawValue
         self.createdAt = createdAt
         self.order = order
+    }
+
+    var status: TaskStatus {
+        get { TaskStatus(rawValue: statusRaw) ?? .todo }
+        set { statusRaw = newValue.rawValue }
     }
 }
 

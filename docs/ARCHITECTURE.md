@@ -47,13 +47,18 @@ long-lived state:
   by a 1 s `RunLoop.main` timer *and* directly by tests. Publishes `phase`,
   `isRunning`, `remaining`, `completedWorkSessions`. Emits the callbacks listed
   above.
-- **`PomodoroModels`** — `@Model TaskItem`, `@Model PomodoroSession` (stores
-  `phaseRaw`, computed `minutes`).
+- **`PomodoroModels`** — `@Model TaskItem` (stores `statusRaw`, computed
+  `status: TaskStatus` — `.todo` default so lightweight migration doesn't
+  break on existing rows), `@Model PomodoroSession` (stores `phaseRaw`,
+  computed `minutes`).
 - **`TimerView`** — circular progress ring, mm:ss, active-task label, controls.
 
 ### `Tasks/`
-- **`TaskListView`** — `@Query(sort: \.order)` list; add / toggle done / delete /
-  stepper for estimate; tap a row to set `AppServices.activeTaskID`.
+- **`TaskListView`** — `@Query(sort: \.order)` list, segmented into To
+  Do/In Progress/Done tabs (`TaskStatus`); add / move between tabs / delete
+  (row's `…` menu) / stepper for estimate; tap a row to set
+  `AppServices.activeTaskID`. Status changes are manual — nothing auto-moves
+  a task to "In Progress".
 
 ### `Stats/`
 - **`StatsService`** (pure enum) — `summary(from:)`, `streak(from:)`,

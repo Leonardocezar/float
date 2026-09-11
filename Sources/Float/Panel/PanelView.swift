@@ -158,6 +158,7 @@ private struct DrawerHandle: View {
             edge: .trailing,
             help: panelState.isDrawerOpen ? "Hide playlist" : "Show playlist"
         ) { panelState.toggleDrawer() }
+        .scaleEffect(x: -1, y: 1)
     }
 }
 
@@ -170,6 +171,7 @@ private struct SettingsHandle: View {
             edge: .leading,
             help: panelState.isSettingsDrawerOpen ? "Hide settings" : "Settings"
         ) { panelState.toggleSettingsDrawer() }
+        .scaleEffect(x: -1, y: 1)
     }
 }
 
